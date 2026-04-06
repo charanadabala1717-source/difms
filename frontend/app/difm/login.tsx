@@ -54,30 +54,30 @@ export default function Login() {
             </div>
 
             <div>
-  <label className="mb-2 block text-lg font-medium text-white/90">
-    Password
-  </label>
+                <label className="mb-2 block text-lg font-medium text-white/90">
+                    Password
+                </label>
 
-  <div className="relative">
-    <input
-      type={showPassword ? "text" : "password"}
-      placeholder="Enter your password"
-      value={password}
-      onChange={(e) => setPassword(e.target.value)}
-      className="w-full rounded-xl border border-white/15 bg-white/90 px-4 py-3 pr-12 text-lg text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-400/60"
-      required
-    />
+                    <div className="relative">
+                        <input
+                            type={showPassword ? "text" : "password"}
+                            placeholder="Enter your password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            className="w-full rounded-xl border border-white/15 bg-white/90 px-4 py-3 pr-12 text-lg text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-400/60"
+                            required
+                        />
 
-    <button
-      type="button"
-      onClick={() => setShowPassword((prev) => !prev)}
-      className="absolute inset-y-0 right-0 flex items-center px-4 text-slate-600 cursor-pointer"
-      aria-label={showPassword ? "Hide password" : "Show password"}
-    >
-      {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-    </button>
-  </div>
-</div>
+                        <button
+                        type="button"
+                        onClick={() => setShowPassword((prev) => !prev)}
+                        className="absolute inset-y-0 right-0 flex items-center px-4 text-slate-600 cursor-pointer"
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                        >
+                        {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                        </button>
+                    </div>
+            </div>
 
             <div className="text-right">
               <a
@@ -99,10 +99,9 @@ export default function Login() {
         </div>
         
         
-      </div>
-      {/* Pattern */}
-        <div className="absolute inset-0 opacity-[0.07] bg-[url('/images/logo-1.jpg')]
-        bg-repeat bg-[length:110px]">
+         </div>
+                <div className="absolute inset-0 opacity-[0.07] bg-[url('/images/logo-1.jpg')]
+                bg-repeat bg-[length:110px]">
         </div>
 
 
