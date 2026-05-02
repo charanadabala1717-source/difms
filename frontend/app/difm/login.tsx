@@ -3,15 +3,19 @@
 import Image from "next/image";
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
+  
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     console.log({ username, password });
+     router.push("/dashboards/overview");
   };
 
   return (
@@ -25,9 +29,9 @@ export default function Login() {
         <div className="w-full max-w-md rounded-3xl border border-white/20 bg-white/20 p-6 shadow-2xl backdrop-blur-xl sm:p-8">
           <div className="mb-6 flex justify-center">
             <Image
-              src="/images/logo-1.jpg"
+              src="/images/intern.jpg"
               alt="DIFMS Logo"
-              width={180}
+              width={80}
               height={80}
               className="h-auto w-auto rounded-md object-contain"
               priority
@@ -100,9 +104,9 @@ export default function Login() {
         
         
          </div>
-                <div className="absolute inset-0 opacity-[0.07] bg-[url('/images/logo-1.jpg')]
+                <div className="absolute inset-0 opacity-[0.07] bg-[url('/images/intern.jpg')]
                 bg-repeat bg-[length:110px]">
-        </div>
+               </div>
 
 
     </div>
