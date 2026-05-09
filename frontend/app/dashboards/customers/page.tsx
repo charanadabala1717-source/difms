@@ -1,63 +1,38 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, Search, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Mail, Plus, Pencil, Trash2, Search, X } from "lucide-react";
+import { apiRequest } from "../../difm/lib/api";
 
 type CustomerStatus = "Paid" | "Unpaid" | "Pending";
 
 type CustomerRow = {
-  id: number;
+  id: string;
   customerId: string;
   name: string;
+  email: string;
   countryCode: string;
   phoneNumber: string;
   totalAmount: string;
   status: CustomerStatus;
 };
 
-const initialCustomers: CustomerRow[] = [
-  {
-    id: 1,
-    customerId: "01",
-    name: "John Mathew",
-    countryCode: "+44",
-    phoneNumber: "7123456789",
-    totalAmount: "1250",
-    status: "Paid",
-  },
-  {
-    id: 2,
-    customerId: "02",
-    name: "Sarah Khan",
-    countryCode: "+91",
-    phoneNumber: "9876543210",
-    totalAmount: "980",
-    status: "Pending",
-  },
-  {
-    id: 3,
-    customerId: "03",
-    name: "David Roy",
-    countryCode: "+1",
-    phoneNumber: "4085550199",
-    totalAmount: "2430",
-    status: "Unpaid",
-  },
-  {
-    id: 4,
-    customerId: "04",
-    name: "Anita Joseph",
-    countryCode: "+44",
-    phoneNumber: "7987654321",
-    totalAmount: "760",
-    status: "Paid",
-  },
-];
+type CustomerResponse = {
+  _id: string;
+  name: string;
+  email?: string;
+  countryCode?: string;
+  phone?: string;
+  phoneNumber?: string;
+  totalAmount?: number;
+  status?: CustomerStatus;
+};
 
 const countryCodes = ["+44", "+91", "+1", "+61", "+971"];
 
 const emptyForm = {
   name: "",
+  email: "",
   countryCode: "+44",
   phoneNumber: "",
   totalAmount: "",
@@ -65,26 +40,43 @@ const emptyForm = {
 };
 
 export default function CustomersPage() {
-  const [customers, setCustomers] = useState<CustomerRow[]>(initialCustomers);
+  const [customers, setCustomers] = useState<CustomerRow[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingCustomerId, setEditingCustomerId] = useState<number | null>(null);
+  const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null);
   const [formData, setFormData] = useState(emptyForm);
-  const [isLoaded, setIsLoaded] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+  const [sendingQuoteId, setSendingQuoteId] = useState<string | null>(null);
 
-  useEffect(() => {
-    const saved = localStorage.getItem("customers");
-    if (saved) {
-      setCustomers(JSON.parse(saved));
+  const mapCustomer = (customer: CustomerResponse, index: number): CustomerRow => ({
+    id: customer._id,
+    customerId: String(index + 1).padStart(2, "0"),
+    name: customer.name,
+    email: customer.email || "",
+    countryCode: customer.countryCode || "+44",
+    phoneNumber: customer.phoneNumber || customer.phone || "",
+    totalAmount: String(customer.totalAmount || 0),
+    status: customer.status || "Pending",
+  });
+
+  const loadCustomers = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError("");
+      const data = await apiRequest<CustomerResponse[]>("/customers");
+      setCustomers(data.map(mapCustomer));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load customers");
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoaded(true);
   }, []);
 
   useEffect(() => {
-    if (isLoaded) {
-      localStorage.setItem("customers", JSON.stringify(customers));
-    }
-  }, [customers, isLoaded]);
+    loadCustomers();
+  }, [loadCustomers]);
 
   const filteredCustomers = useMemo(() => {
     const q = searchTerm.toLowerCase();
@@ -93,21 +85,12 @@ export default function CustomersPage() {
       (customer) =>
         customer.customerId.toLowerCase().includes(q) ||
         customer.name.toLowerCase().includes(q) ||
+        customer.email.toLowerCase().includes(q) ||
         `${customer.countryCode} ${customer.phoneNumber}`.toLowerCase().includes(q) ||
         customer.totalAmount.toLowerCase().includes(q) ||
         customer.status.toLowerCase().includes(q)
     );
   }, [customers, searchTerm]);
-
-  const generateCustomerId = () => {
-    if (customers.length === 0) return "01";
-
-    const maxId = Math.max(
-      ...customers.map((customer) => Number(customer.customerId))
-    );
-
-    return String(maxId + 1).padStart(2, "0");
-  };
 
   const openAddModal = () => {
     setEditingCustomerId(null);
@@ -119,6 +102,7 @@ export default function CustomersPage() {
     setEditingCustomerId(customer.id);
     setFormData({
       name: customer.name,
+      email: customer.email,
       countryCode: customer.countryCode,
       phoneNumber: customer.phoneNumber,
       totalAmount: customer.totalAmount,
@@ -133,8 +117,15 @@ export default function CustomersPage() {
     setFormData(emptyForm);
   };
 
-  const handleDelete = (id: number) => {
-    setCustomers((prev) => prev.filter((customer) => customer.id !== id));
+  const handleDelete = async (id: string) => {
+    try {
+      setError("");
+      setSuccessMessage("");
+      await apiRequest(`/customers/${id}`, { method: "DELETE" });
+      setCustomers((prev) => prev.filter((customer) => customer.id !== id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete customer");
+    }
   };
 
   const handleChange = (
@@ -166,47 +157,67 @@ export default function CustomersPage() {
     }));
   };
 
-  const handleSave = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     if (
       !formData.name.trim() ||
+      !formData.email.trim() ||
       !formData.phoneNumber.trim() ||
       !formData.totalAmount.trim()
     ) {
       return;
     }
 
-    if (editingCustomerId !== null) {
-      setCustomers((prev) =>
-        prev.map((customer) =>
-          customer.id === editingCustomerId
-            ? {
-                ...customer,
-                name: formData.name,
-                countryCode: formData.countryCode,
-                phoneNumber: formData.phoneNumber,
-                totalAmount: formData.totalAmount,
-                status: formData.status,
-              }
-            : customer
-        )
-      );
-    } else {
-      const newCustomer: CustomerRow = {
-        id: Date.now(),
-        customerId: generateCustomerId(),
+    try {
+      setError("");
+      setSuccessMessage("");
+      const payload = {
         name: formData.name,
+        email: formData.email,
         countryCode: formData.countryCode,
         phoneNumber: formData.phoneNumber,
-        totalAmount: formData.totalAmount,
+        phone: formData.phoneNumber,
+        totalAmount: Number(formData.totalAmount),
         status: formData.status,
       };
 
-      setCustomers((prev) => [newCustomer, ...prev]);
-    }
+      if (editingCustomerId !== null) {
+        await apiRequest<CustomerResponse>(`/customers/${editingCustomerId}`, {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        });
+      } else {
+        await apiRequest<CustomerResponse>("/customers", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+      }
 
-    closeModal();
+      await loadCustomers();
+      closeModal();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save customer");
+    }
+  };
+
+  const handleSendQuote = async (customer: CustomerRow) => {
+    try {
+      setError("");
+      setSuccessMessage("");
+      setSendingQuoteId(customer.id);
+
+      const response = await apiRequest<{ message: string }>(
+        `/customers/${customer.id}/send-quote`,
+        { method: "POST" }
+      );
+
+      setSuccessMessage(response.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send quote email");
+    } finally {
+      setSendingQuoteId(null);
+    }
   };
 
   const getStatusClasses = (status: CustomerStatus) => {
@@ -259,6 +270,18 @@ export default function CustomersPage() {
         </div>
       </div>
 
+      {error && (
+        <div className="mb-4 rounded-xl border border-red-400/40 bg-red-500/20 px-4 py-3 text-sm text-white">
+          {error}
+        </div>
+      )}
+
+      {successMessage && (
+        <div className="mb-4 rounded-xl border border-green-400/40 bg-green-500/20 px-4 py-3 text-sm text-white">
+          {successMessage}
+        </div>
+      )}
+
       <div className="rounded-2xl border border-slate-700 bg-slate-800 p-5 text-white shadow-lg">
         <div className="mb-4">
           <h2 className="text-xl font-semibold">Customer Records</h2>
@@ -278,6 +301,9 @@ export default function CustomersPage() {
                   Name
                 </th>
                 <th className="px-4 text-left text-sm font-semibold text-slate-400">
+                  Email
+                </th>
+                <th className="px-4 text-left text-sm font-semibold text-slate-400">
                   Phone Number
                 </th>
                 <th className="px-4 text-left text-sm font-semibold text-slate-400">
@@ -293,7 +319,16 @@ export default function CustomersPage() {
             </thead>
 
             <tbody>
-              {filteredCustomers.length > 0 ? (
+              {isLoading ? (
+                <tr>
+                  <td
+                    colSpan={7}
+                    className="rounded-xl bg-slate-700/30 px-4 py-8 text-center text-sm text-slate-300"
+                  >
+                    Loading customers...
+                  </td>
+                </tr>
+              ) : filteredCustomers.length > 0 ? (
                 filteredCustomers.map((customer) => (
                   <tr
                     key={customer.id}
@@ -304,6 +339,9 @@ export default function CustomersPage() {
                     </td>
                     <td className="px-4 py-4 text-sm text-slate-200">
                       {customer.name}
+                    </td>
+                    <td className="px-4 py-4 text-sm text-slate-200">
+                      {customer.email}
                     </td>
                     <td className="px-4 py-4 text-sm text-slate-200">
                       {customer.countryCode} {customer.phoneNumber}
@@ -322,6 +360,15 @@ export default function CustomersPage() {
                     </td>
                     <td className="rounded-r-xl px-4 py-4">
                       <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => handleSendQuote(customer)}
+                          disabled={sendingQuoteId === customer.id}
+                          className="cursor-pointer rounded-lg bg-emerald-500/10 p-2 text-emerald-400 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                          aria-label={`Send quote email to ${customer.name}`}
+                        >
+                          <Mail size={16} />
+                        </button>
+
                         <button
                           onClick={() => openEditModal(customer)}
                           className="cursor-pointer rounded-lg bg-blue-500/10 p-2 text-blue-400 transition hover:bg-blue-500/20"
@@ -344,7 +391,7 @@ export default function CustomersPage() {
               ) : (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={7}
                     className="rounded-xl bg-slate-700/30 px-4 py-8 text-center text-sm text-slate-300"
                   >
                     No customer records found.
@@ -394,6 +441,21 @@ export default function CustomersPage() {
                   value={formData.name}
                   onChange={handleChange}
                   placeholder="Enter customer name"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-blue-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-300">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  placeholder="Enter customer email"
                   className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-blue-500"
                   required
                 />

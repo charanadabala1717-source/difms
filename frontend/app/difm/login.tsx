@@ -4,18 +4,57 @@ import Image from "next/image";
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { apiRequest, setAuthSession } from "../difm/lib/api";
+
+type AuthResponse = {
+  _id: string;
+  name: string;
+  email: string;
+  role: string;
+  token: string;
+};
 
 export default function Login() {
-  const [username, setUsername] = useState("");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    console.log({ username, password });
-     router.push("/dashboards/overview");
+    setError("");
+    setIsSubmitting(true);
+
+    try {
+      const endpoint = authMode === "login" ? "/auth/login" : "/auth/register";
+      const body =
+        authMode === "login"
+          ? { email, password }
+          : { name, email, password };
+
+      const user = await apiRequest<AuthResponse>(endpoint, {
+        method: "POST",
+        body: JSON.stringify(body),
+        skipAuth: true,
+      });
+
+      setAuthSession(user.token, {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      });
+      router.push("/dashboards/overview");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Authentication failed");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -39,19 +78,35 @@ export default function Login() {
           </div>
 
           <h1 className="mb-7 text-center text-3xl font-semibold tracking-wide text-white sm:text-4xl">
-            Admin Login
+            {authMode === "login" ? "Admin Login" : "Create Account"}
           </h1>
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {authMode === "register" && (
+              <div>
+                <label className="mb-2 block text-lg font-medium text-white/90">
+                  Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter your name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full rounded-xl border border-white/20 bg-white/90 px-4 py-3 text-lg text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-400"
+                  required
+                />
+              </div>
+            )}
+
             <div>
               <label className="mb-2 block text-lg font-medium text-white/90">
-                Username
+                Email
               </label>
               <input
-                type="text"
-                placeholder="Enter your username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                type="email"
+                placeholder="Enter your email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 className="w-full rounded-xl border border-white/20 bg-white/90 px-4 py-3 text-lg text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-400"
                 required
               />
@@ -83,20 +138,35 @@ export default function Login() {
                     </div>
             </div>
 
-            <div className="text-right">
-              <a
-                href="#"
-                className="text-sm text-blue-100 underline underline-offset-4 hover:text-white"
-              >
-                Forgot password?
-              </a>
-            </div>
+            {error && (
+              <p className="rounded-xl border border-red-300/40 bg-red-500/20 px-4 py-3 text-sm text-white">
+                {error}
+              </p>
+            )}
 
             <button
               type="submit"
+              disabled={isSubmitting}
               className="w-full cursor-pointer rounded-xl bg-gradient-to-r from-sky-400 via-blue-600 to-slate-950 px-4 py-3 text-base font-semibold text-white shadow-lg transition duration-300 hover:scale-[1.01] hover:shadow-blue-500/30 active:scale-[0.99]"
             >
-              Login
+              {isSubmitting
+                ? "Please wait..."
+                : authMode === "login"
+                  ? "Login"
+                  : "Register"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode((prev) => (prev === "login" ? "register" : "login"));
+                setError("");
+              }}
+              className="w-full cursor-pointer text-sm font-medium text-blue-100 underline underline-offset-4 hover:text-white"
+            >
+              {authMode === "login"
+                ? "Create a new account"
+                : "Already have an account? Login"}
             </button>
           </form>
           

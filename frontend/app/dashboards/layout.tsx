@@ -2,7 +2,8 @@
 
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { clearAuthSession, getToken } from "../difm/lib/api";
 import {
   LayoutDashboard,
   Users,
@@ -31,6 +32,12 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  useEffect(() => {
+    if (!getToken()) {
+      router.push("/");
+    }
+  }, [router]);
+
   const currentPageName = useMemo(() => {
     const found = navItems.find((item) => item.path === pathname);
     return found?.name ?? "Dashboard";
@@ -42,6 +49,7 @@ export default function DashboardLayout({
   };
 
   const handleLogout = () => {
+    clearAuthSession();
     router.push("/");
     setMobileMenuOpen(false);
   };

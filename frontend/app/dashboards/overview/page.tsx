@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import {
   PieChart,
   Pie,
@@ -12,28 +13,73 @@ import {
   YAxis,
   CartesianGrid,
 } from "recharts";
+import { apiRequest } from "../../difm/lib/api";
 
-const revenueData = [
-  { name: "Weekly", value: 12000, color: "#6366f1" },
-  { name: "Monthly", value: 24000, color: "#38bdf8" },
-  { name: "Annual", value: 64000, color: "#989eba" },
-];
+type CustomerResponse = {
+  _id: string;
+};
 
-const revenueGrowthData = [
-  { month: "Jan", revenue: 42000 },
-  { month: "Feb", revenue: 51000 },
-  { month: "Mar", revenue: 48000 },
-  { month: "Apr", revenue: 62000 },
-  { month: "May", revenue: 70000 },
-  { month: "Jun", revenue: 76000 },
-];
+type InvoiceStatus =
+  | "draft"
+  | "sent"
+  | "partially_paid"
+  | "paid"
+  | "overdue"
+  | "cancelled";
 
-const recentTransactions = [
-  { id: "INV-1001", customer: "John Mathew", amount: "$1,250", status: "Paid" },
-  { id: "INV-1002", customer: "Sarah Khan", amount: "$980", status: "Pending" },
-  { id: "INV-1003", customer: "David Roy", amount: "$2,430", status: "Paid" },
-  { id: "INV-1004", customer: "Anita Joseph", amount: "$760", status: "Overdue" },
-];
+type InvoiceResponse = {
+  _id: string;
+  invoiceNumber: string;
+  customer?: {
+    name?: string;
+  };
+  total: number;
+  amountPaid?: number;
+  status: InvoiceStatus;
+  createdAt?: string;
+};
+
+type PaymentResponse = {
+  _id: string;
+  amount: number;
+  paymentDate?: string;
+  createdAt?: string;
+};
+
+const currencyFormatter = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "GBP",
+  maximumFractionDigits: 0,
+});
+
+const formatCurrency = (value: number) => currencyFormatter.format(value || 0);
+
+const monthLabels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"];
+
+const toUiStatus = (status: InvoiceStatus) => {
+  if (status === "paid") return "Paid";
+  if (status === "overdue") return "Overdue";
+  return "Pending";
+};
+
+const isSameWeek = (date: Date, now: Date) => {
+  const start = new Date(now);
+  start.setDate(now.getDate() - now.getDay());
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date(start);
+  end.setDate(start.getDate() + 7);
+
+  return date >= start && date < end;
+};
+
+const isSameMonth = (date: Date, now: Date) => {
+  return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+};
+
+const isSameYear = (date: Date, now: Date) => {
+  return date.getFullYear() === now.getFullYear();
+};
 
 function StatCard({
   title,
@@ -56,40 +102,162 @@ function StatCard({
 }
 
 export default function OverviewPage() {
+  const [customers, setCustomers] = useState<CustomerResponse[]>([]);
+  const [invoices, setInvoices] = useState<InvoiceResponse[]>([]);
+  const [payments, setPayments] = useState<PaymentResponse[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const loadOverview = async () => {
+      try {
+        setIsLoading(true);
+        setError("");
+
+        const [customerData, invoiceData, paymentData] = await Promise.all([
+          apiRequest<CustomerResponse[]>("/customers"),
+          apiRequest<InvoiceResponse[]>("/invoices"),
+          apiRequest<PaymentResponse[]>("/payments"),
+        ]);
+
+        setCustomers(customerData);
+        setInvoices(invoiceData);
+        setPayments(paymentData);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load overview data");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadOverview();
+  }, []);
+
+  const overview = useMemo(() => {
+    const now = new Date();
+    const revenueItems =
+      payments.length > 0
+        ? payments.map((payment) => ({
+            amount: Number(payment.amount) || 0,
+            date: new Date(payment.paymentDate || payment.createdAt || Date.now()),
+          }))
+        : invoices
+            .filter((invoice) => invoice.status === "paid")
+            .map((invoice) => ({
+              amount: Number(invoice.amountPaid || invoice.total) || 0,
+              date: new Date(invoice.createdAt || Date.now()),
+            }));
+
+    const totalRevenue = revenueItems.reduce((sum, item) => sum + item.amount, 0);
+    const weeklyRevenue = revenueItems
+      .filter((item) => isSameWeek(item.date, now))
+      .reduce((sum, item) => sum + item.amount, 0);
+    const monthlyRevenue = revenueItems
+      .filter((item) => isSameMonth(item.date, now))
+      .reduce((sum, item) => sum + item.amount, 0);
+    const annualRevenue = revenueItems
+      .filter((item) => isSameYear(item.date, now))
+      .reduce((sum, item) => sum + item.amount, 0);
+
+    const paidInvoices = invoices.filter((invoice) => invoice.status === "paid").length;
+    const overdueInvoices = invoices.filter((invoice) => invoice.status === "overdue").length;
+    const pendingInvoices = invoices.filter(
+      (invoice) =>
+        invoice.status === "draft" ||
+        invoice.status === "sent" ||
+        invoice.status === "partially_paid"
+    ).length;
+
+    const maxStatusCount = Math.max(paidInvoices, pendingInvoices, overdueInvoices, 1);
+
+    const revenueData = [
+      { name: "Weekly", value: weeklyRevenue, color: "#6366f1" },
+      { name: "Monthly", value: monthlyRevenue, color: "#38bdf8" },
+      { name: "Annual", value: annualRevenue, color: "#989eba" },
+    ];
+
+    const revenueGrowthData = monthLabels.map((month, index) => {
+      const monthRevenue = revenueItems
+        .filter(
+          (item) =>
+            item.date.getMonth() === index && item.date.getFullYear() === now.getFullYear()
+        )
+        .reduce((sum, item) => sum + item.amount, 0);
+
+      return { month, revenue: monthRevenue };
+    });
+
+    const recentTransactions = invoices
+      .slice()
+      .sort(
+        (a, b) =>
+          new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+      )
+      .slice(0, 5)
+      .map((invoice) => ({
+        id: invoice.invoiceNumber,
+        customer: invoice.customer?.name || "Unknown Customer",
+        amount: formatCurrency(invoice.total),
+        status: toUiStatus(invoice.status),
+      }));
+
+    return {
+      totalCustomers: customers.length,
+      totalInvoices: invoices.length,
+      totalRevenue,
+      weeklyRevenue,
+      monthlyRevenue,
+      annualRevenue,
+      paidInvoices,
+      pendingInvoices,
+      overdueInvoices,
+      maxStatusCount,
+      revenueData,
+      revenueGrowthData,
+      recentTransactions,
+    };
+  }, [customers.length, invoices, payments]);
+
   return (
     <div className="min-h-screen">
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-white sm:text-4xl">Overview</h1>
         <p className="mt-2 text-sm text-slate-300 sm:text-base">
-          Welcome to the DIFMS dashboard overview.
+          {isLoading ? "Loading live dashboard data..." : "Welcome to the DIFMS dashboard overview."}
         </p>
       </div>
+
+      {error && (
+        <div className="mb-4 rounded-xl border border-red-400/40 bg-red-500/20 px-4 py-3 text-sm text-white">
+          {error}
+        </div>
+      )}
 
       {/* Main Stats */}
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           title="Total Customers"
-          value="1,245"
-          trend="+12.5% this month"
+          value={String(overview.totalCustomers)}
+          trend="Live from MongoDB"
           trendColor="text-green-400"
         />
         <StatCard
           title="Invoices"
-          value="320"
-          trend="+8.2% this month"
+          value={String(overview.totalInvoices)}
+          trend="Live from MongoDB"
           trendColor="text-green-400"
         />
         <StatCard
           title="Feedback"
-          value="89"
-          trend="+4.1% this week"
+          value="0"
+          trend="Not connected yet"
           trendColor="text-green-400"
         />
         <StatCard
           title="Open Tickets"
-          value="14"
-          trend="-2.3% this week"
-          trendColor="text-red-400"
+          value="0"
+          trend="Not connected yet"
+          trendColor="text-slate-400"
         />
       </div>
 
@@ -97,26 +265,26 @@ export default function OverviewPage() {
       <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           title="Total Revenue"
-          value="$954,000"
-          trend="+15.8% growth"
+          value={formatCurrency(overview.totalRevenue)}
+          trend="From payments/paid invoices"
           trendColor="text-green-400"
         />
         <StatCard
           title="Weekly Revenue"
-          value="$18,000"
-          trend="+5.4% this week"
+          value={formatCurrency(overview.weeklyRevenue)}
+          trend="Current week"
           trendColor="text-green-400"
         />
         <StatCard
           title="Monthly Revenue"
-          value="$72,000"
-          trend="+9.7% this month"
+          value={formatCurrency(overview.monthlyRevenue)}
+          trend="Current month"
           trendColor="text-green-400"
         />
         <StatCard
           title="Annual Revenue"
-          value="$864,000"
-          trend="+18.3% this year"
+          value={formatCurrency(overview.annualRevenue)}
+          trend="Current year"
           trendColor="text-green-400"
         />
       </div>
@@ -134,7 +302,7 @@ export default function OverviewPage() {
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={revenueData}
+                  data={overview.revenueData}
                   dataKey="value"
                   nameKey="name"
                   cx="50%"
@@ -142,7 +310,7 @@ export default function OverviewPage() {
                   outerRadius={90}
                   label
                 >
-                  {revenueData.map((item, index) => (
+                  {overview.revenueData.map((item, index) => (
                     <Cell key={index} fill={item.color} />
                   ))}
                 </Pie>
@@ -152,7 +320,7 @@ export default function OverviewPage() {
           </div>
 
           <div className="mt-6 flex flex-wrap justify-center gap-6">
-            {revenueData.map((item, index) => (
+            {overview.revenueData.map((item, index) => (
               <div
                 key={index}
                 className="flex cursor-pointer items-center gap-2 transition hover:scale-105"
@@ -178,7 +346,7 @@ export default function OverviewPage() {
 
           <div className="mt-6 h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={revenueGrowthData}>
+              <LineChart data={overview.revenueGrowthData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
                 <XAxis dataKey="month" stroke="#cbd5e1" />
                 <YAxis stroke="#cbd5e1" />
@@ -207,25 +375,46 @@ export default function OverviewPage() {
         <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-3">
           <div className="cursor-pointer rounded-xl bg-white/10 p-5 backdrop-blur-md transition duration-300 hover:-translate-y-1 hover:bg-white/15">
             <p className="text-sm text-slate-300">Paid</p>
-            <p className="mt-2 text-2xl font-bold text-green-400">220</p>
+            <p className="mt-2 text-2xl font-bold text-green-400">
+              {overview.paidInvoices}
+            </p>
             <div className="mt-4 h-2 w-full rounded-full bg-white/20">
-              <div className="h-2 w-[85%] rounded-full bg-green-500" />
+              <div
+                className="h-2 rounded-full bg-green-500"
+                style={{
+                  width: `${(overview.paidInvoices / overview.maxStatusCount) * 100}%`,
+                }}
+              />
             </div>
           </div>
 
           <div className="cursor-pointer rounded-xl bg-white/10 p-5 backdrop-blur-md transition duration-300 hover:-translate-y-1 hover:bg-white/15">
             <p className="text-sm text-slate-300">Pending</p>
-            <p className="mt-2 text-2xl font-bold text-orange-400">70</p>
+            <p className="mt-2 text-2xl font-bold text-orange-400">
+              {overview.pendingInvoices}
+            </p>
             <div className="mt-4 h-2 w-full rounded-full bg-white/20">
-              <div className="h-2 w-[40%] rounded-full bg-orange-500" />
+              <div
+                className="h-2 rounded-full bg-orange-500"
+                style={{
+                  width: `${(overview.pendingInvoices / overview.maxStatusCount) * 100}%`,
+                }}
+              />
             </div>
           </div>
 
           <div className="cursor-pointer rounded-xl bg-white/10 p-5 backdrop-blur-md transition duration-300 hover:-translate-y-1 hover:bg-white/15">
             <p className="text-sm text-slate-300">Overdue</p>
-            <p className="mt-2 text-2xl font-bold text-red-400">30</p>
+            <p className="mt-2 text-2xl font-bold text-red-400">
+              {overview.overdueInvoices}
+            </p>
             <div className="mt-4 h-2 w-full rounded-full bg-white/20">
-              <div className="h-2 w-[20%] rounded-full bg-red-500" />
+              <div
+                className="h-2 rounded-full bg-red-500"
+                style={{
+                  width: `${(overview.overdueInvoices / overview.maxStatusCount) * 100}%`,
+                }}
+              />
             </div>
           </div>
         </div>
@@ -260,7 +449,8 @@ export default function OverviewPage() {
             </thead>
 
             <tbody>
-              {recentTransactions.map((transaction) => (
+              {overview.recentTransactions.length > 0 ? (
+                overview.recentTransactions.map((transaction) => (
                 <tr key={transaction.id} className="rounded-xl bg-slate-700/40">
                   <td className="rounded-l-xl px-4 py-3 text-sm font-medium text-slate-100">
                     {transaction.id}
@@ -285,7 +475,17 @@ export default function OverviewPage() {
                     </span>
                   </td>
                 </tr>
-              ))}
+                ))
+              ) : (
+                <tr>
+                  <td
+                    colSpan={4}
+                    className="rounded-xl bg-slate-700/30 px-4 py-8 text-center text-sm text-slate-300"
+                  >
+                    No invoice activity yet.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

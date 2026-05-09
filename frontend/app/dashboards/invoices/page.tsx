@@ -1,36 +1,32 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, Search, X, FileDown } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Pencil, Trash2, Search, X, FileDown } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { apiRequest } from "../../difm/lib/api";
 
 type InvoiceStatus = "Paid" | "Pending" | "Overdue";
 
 type InvoiceRow = {
-  id: number;
+  id: string;
   invoiceId: string;
   customerName: string;
   amount: string;
   status: InvoiceStatus;
 };
 
-const initialInvoices: InvoiceRow[] = [
-  {
-    id: 1,
-    invoiceId: "INV-01",
-    customerName: "John Mathew",
-    amount: "1250",
-    status: "Paid",
-  },
-  {
-    id: 2,
-    invoiceId: "INV-02",
-    customerName: "Sarah Khan",
-    amount: "980",
-    status: "Pending",
-  },
-];
+type InvoiceResponse = {
+  _id: string;
+  invoiceNumber: string;
+  customer?: {
+    name?: string;
+  };
+  total: number;
+  amountPaid?: number;
+  balanceDue?: number;
+  status: "draft" | "sent" | "partially_paid" | "paid" | "overdue" | "cancelled";
+};
 
 const emptyForm = {
   customerName: "",
@@ -38,23 +34,52 @@ const emptyForm = {
   status: "Pending" as InvoiceStatus,
 };
 
+const mapStatus = (invoice: InvoiceResponse): InvoiceStatus => {
+  if (
+    invoice.status === "paid" ||
+    Number(invoice.balanceDue) <= 0 ||
+    Number(invoice.amountPaid) >= Number(invoice.total)
+  ) {
+    return "Paid";
+  }
+
+  if (invoice.status === "overdue") return "Overdue";
+  return "Pending";
+};
+
+const mapInvoice = (invoice: InvoiceResponse): InvoiceRow => ({
+  id: invoice._id,
+  invoiceId: invoice.invoiceNumber,
+  customerName: invoice.customer?.name || "Unknown Customer",
+  amount: String(invoice.total || 0),
+  status: mapStatus(invoice),
+});
+
 export default function InvoicesPage() {
-  const [invoices, setInvoices] = useState<InvoiceRow[]>(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("invoices");
-      return saved ? JSON.parse(saved) : initialInvoices;
-    }
-    return initialInvoices;
-  });
-
-  useEffect(() => {
-    localStorage.setItem("invoices", JSON.stringify(invoices));
-  }, [invoices]);
-
+  const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingInvoiceId, setEditingInvoiceId] = useState<number | null>(null);
+  const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
   const [formData, setFormData] = useState(emptyForm);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const loadInvoices = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError("");
+      const data = await apiRequest<InvoiceResponse[]>("/invoices");
+      setInvoices(data.map(mapInvoice));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load invoices");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadInvoices();
+  }, [loadInvoices]);
 
   const filteredInvoices = useMemo(() => {
     const q = searchTerm.toLowerCase();
@@ -67,24 +92,6 @@ export default function InvoicesPage() {
         invoice.amount.toLowerCase().includes(q)
     );
   }, [invoices, searchTerm]);
-
-  const generateInvoiceId = () => {
-    if (invoices.length === 0) return "INV-01";
-
-    const maxId = Math.max(
-      ...invoices.map((invoice) =>
-        Number(invoice.invoiceId.replace("INV-", ""))
-      )
-    );
-
-    return `INV-${String(maxId + 1).padStart(2, "0")}`;
-  };
-
-  const openAddModal = () => {
-    setEditingInvoiceId(null);
-    setFormData(emptyForm);
-    setIsModalOpen(true);
-  };
 
   const openEditModal = (invoice: InvoiceRow) => {
     setEditingInvoiceId(invoice.id);
@@ -102,8 +109,14 @@ export default function InvoicesPage() {
     setFormData(emptyForm);
   };
 
-  const handleDelete = (id: number) => {
-    setInvoices((prev) => prev.filter((invoice) => invoice.id !== id));
+  const handleDelete = async (id: string) => {
+    try {
+      setError("");
+      await apiRequest(`/invoices/${id}`, { method: "DELETE" });
+      setInvoices((prev) => prev.filter((invoice) => invoice.id !== id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete invoice");
+    }
   };
 
   const handleChange = (
@@ -117,37 +130,36 @@ export default function InvoicesPage() {
     }));
   };
 
-  const handleSave = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     if (!formData.customerName.trim() || !formData.amount.trim()) return;
 
-    if (editingInvoiceId !== null) {
-      setInvoices((prev) =>
-        prev.map((invoice) =>
-          invoice.id === editingInvoiceId
-            ? {
-                ...invoice,
-                customerName: formData.customerName,
-                amount: formData.amount,
-                status: formData.status,
-              }
-            : invoice
-        )
-      );
-    } else {
-      const newInvoice: InvoiceRow = {
-        id: Date.now(),
-        invoiceId: generateInvoiceId(),
+    try {
+      setError("");
+      const payload = {
         customerName: formData.customerName,
-        amount: formData.amount,
+        amount: Number(formData.amount),
         status: formData.status,
       };
 
-      setInvoices((prev) => [newInvoice, ...prev]);
-    }
+      if (editingInvoiceId !== null) {
+        await apiRequest<InvoiceResponse>(`/invoices/${editingInvoiceId}`, {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        });
+      } else {
+        await apiRequest<InvoiceResponse>("/invoices", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+      }
 
-    closeModal();
+      await loadInvoices();
+      closeModal();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save invoice");
+    }
   };
 
   const handleDownloadPdf = (invoice: InvoiceRow) => {
@@ -219,16 +231,14 @@ export default function InvoicesPage() {
               className="w-full rounded-xl border border-slate-700 bg-slate-800 py-3 pl-10 pr-4 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-blue-500 sm:w-72"
             />
           </div>
-
-          <button
-            onClick={openAddModal}
-            className="flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition duration-200 hover:bg-blue-700"
-          >
-            <Plus size={18} />
-            <span>Add Invoice</span>
-          </button>
         </div>
       </div>
+
+      {error && (
+        <div className="mb-4 rounded-xl border border-red-400/40 bg-red-500/20 px-4 py-3 text-sm text-white">
+          {error}
+        </div>
+      )}
 
       <div className="rounded-2xl border border-slate-700 bg-slate-800 p-5 text-white shadow-lg">
         <div className="mb-4">
@@ -261,7 +271,16 @@ export default function InvoicesPage() {
             </thead>
 
             <tbody>
-              {filteredInvoices.length > 0 ? (
+              {isLoading ? (
+                <tr>
+                  <td
+                    colSpan={5}
+                    className="rounded-xl bg-slate-700/30 px-4 py-8 text-center text-sm text-slate-300"
+                  >
+                    Loading invoices...
+                  </td>
+                </tr>
+              ) : filteredInvoices.length > 0 ? (
                 filteredInvoices.map((invoice) => (
                   <tr
                     key={invoice.id}
@@ -340,7 +359,7 @@ export default function InvoicesPage() {
             <div className="mb-5 flex items-center justify-between">
               <div>
                 <h2 className="text-2xl font-semibold">
-                  {editingInvoiceId !== null ? "Edit Invoice" : "Add Invoice"}
+                  Edit Invoice
                 </h2>
                 <p className="mt-1 text-sm text-slate-400">
                   Fill in the invoice details below.
@@ -421,7 +440,7 @@ export default function InvoicesPage() {
                   type="submit"
                   className="cursor-pointer rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-700"
                 >
-                  {editingInvoiceId !== null ? "Update" : "Save"}
+                  Update
                 </button>
               </div>
             </form>
