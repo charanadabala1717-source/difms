@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pencil, Trash2, Search, X, FileDown } from "lucide-react";
+import { Mail, Pencil, Trash2, Search, X, FileDown } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { apiRequest } from "../../difm/lib/api";
@@ -63,6 +63,8 @@ export default function InvoicesPage() {
   const [formData, setFormData] = useState(emptyForm);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+  const [sendingReceiptId, setSendingReceiptId] = useState<string | null>(null);
 
   const loadInvoices = useCallback(async () => {
     try {
@@ -112,6 +114,7 @@ export default function InvoicesPage() {
   const handleDelete = async (id: string) => {
     try {
       setError("");
+      setSuccessMessage("");
       await apiRequest(`/invoices/${id}`, { method: "DELETE" });
       setInvoices((prev) => prev.filter((invoice) => invoice.id !== id));
     } catch (err) {
@@ -137,6 +140,7 @@ export default function InvoicesPage() {
 
     try {
       setError("");
+      setSuccessMessage("");
       const payload = {
         customerName: formData.customerName,
         amount: Number(formData.amount),
@@ -192,6 +196,25 @@ export default function InvoicesPage() {
     doc.save(`${invoice.invoiceId}.pdf`);
   };
 
+  const handleSendReceiptEmail = async (invoice: InvoiceRow) => {
+    try {
+      setError("");
+      setSuccessMessage("");
+      setSendingReceiptId(invoice.id);
+
+      const response = await apiRequest<{ message: string }>(
+        `/invoices/${invoice.id}/send-receipt`,
+        { method: "POST" }
+      );
+
+      setSuccessMessage(response.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send receipt email");
+    } finally {
+      setSendingReceiptId(null);
+    }
+  };
+
   const getStatusClasses = (status: InvoiceStatus) => {
     switch (status) {
       case "Paid":
@@ -237,6 +260,12 @@ export default function InvoicesPage() {
       {error && (
         <div className="mb-4 rounded-xl border border-red-400/40 bg-red-500/20 px-4 py-3 text-sm text-white">
           {error}
+        </div>
+      )}
+
+      {successMessage && (
+        <div className="mb-4 rounded-xl border border-green-400/40 bg-green-500/20 px-4 py-3 text-sm text-white">
+          {successMessage}
         </div>
       )}
 
@@ -320,6 +349,20 @@ export default function InvoicesPage() {
                           aria-label={`Download PDF ${invoice.invoiceId}`}
                         >
                           <FileDown size={16} />
+                        </button>
+
+                        <button
+                          onClick={() => handleSendReceiptEmail(invoice)}
+                          disabled={invoice.status !== "Paid" || sendingReceiptId === invoice.id}
+                          className="cursor-pointer rounded-lg bg-sky-500/10 p-2 text-sky-400 transition hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                          aria-label={`Email receipt for ${invoice.invoiceId}`}
+                          title={
+                            invoice.status === "Paid"
+                              ? "Email receipt"
+                              : "Receipt email is available after payment"
+                          }
+                        >
+                          <Mail size={16} />
                         </button>
 
                         <button

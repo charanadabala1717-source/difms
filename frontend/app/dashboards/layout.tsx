@@ -63,7 +63,7 @@ export default function DashboardLayout({
       <header className="sticky top-0 z-40 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 shadow-sm md:hidden">
         <div className="flex items-center gap-3">
           <Image
-            src="/images/logo-1.jpg"
+            src="/images/intern.jpg"
             alt="DIFMS Logo"
             width={42}
             height={42}
@@ -92,7 +92,7 @@ export default function DashboardLayout({
           <div className="border-b border-slate-700 px-5 py-6">
             <div className="flex items-center gap-4">
               <Image
-                src="/images/logo-1.jpg"
+                src="/images/intern.jpg"
                 alt="DIFMS Logo"
                 width={70}
                 height={70}
@@ -150,7 +150,7 @@ export default function DashboardLayout({
               <div className="flex items-center justify-between border-b border-slate-700 px-5 py-5">
                 <div className="flex items-center gap-3">
                   <Image
-                    src="/images/logo-1.jpg"
+                    src="/images/intern.jpg"
                     alt="DIFMS Logo"
                     width={52}
                     height={52}
