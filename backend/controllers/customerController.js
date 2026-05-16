@@ -11,6 +11,7 @@ const createCustomer = async (req, res) => {
       countryCode,
       phoneNumber,
       totalAmount,
+      service,
       status,
       address,
       companyName,
@@ -28,6 +29,7 @@ const createCustomer = async (req, res) => {
       countryCode,
       phoneNumber,
       totalAmount: Number(totalAmount) || 0,
+      service,
       status,
       address,
       companyName,
@@ -126,7 +128,7 @@ const sendCustomerQuoteEmail = async (req, res) => {
       quoteNumber: createNumber("QTE"),
       items: [
         {
-          name: "Customer quote amount",
+          name: customer.service || "Service",
           description: `Quote for ${customer.name}`,
           quantity: 1,
           price: amount,

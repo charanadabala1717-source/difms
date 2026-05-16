@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const Invoice = require("../models/Invoice");
 const Quote = require("../models/Quote");
 const { sendEmail } = require("./emailService");
+const { syncCustomerStatusFromInvoice } = require("./customerStatus");
 
 const createNumber = (prefix) => {
   return `${prefix}-${Date.now()}`;
@@ -36,7 +37,7 @@ const createInvoiceFromQuote = async (quote, dueDate) => {
     return existingInvoice;
   }
 
-  return Invoice.create({
+  const invoice = await Invoice.create({
     user: quote.user,
     customer: quote.customer,
     quote: quote._id,
@@ -52,6 +53,9 @@ const createInvoiceFromQuote = async (quote, dueDate) => {
     dueDate,
     paymentToken: createToken(),
   });
+
+  await syncCustomerStatusFromInvoice(invoice);
+  return invoice;
 };
 
 const sendQuoteEmail = async (quote) => {

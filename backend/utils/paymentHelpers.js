@@ -1,5 +1,6 @@
 const Payment = require("../models/Payment");
 const Receipt = require("../models/Receipt");
+const { syncCustomerStatusFromInvoice } = require("./customerStatus");
 
 const createNumber = (prefix) => {
   return `${prefix}-${Date.now()}`;
@@ -47,6 +48,7 @@ const recordInvoicePayment = async ({
     invoice.paidAt = new Date();
   }
   await invoice.save();
+  await syncCustomerStatusFromInvoice(invoice);
 
   const receipt = await Receipt.create({
     user: invoice.user,

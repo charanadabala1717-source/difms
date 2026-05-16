@@ -34,6 +34,10 @@ const customerSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    service: {
+      type: String,
+      trim: true,
+    },
     status: {
       type: String,
       enum: ["Paid", "Unpaid", "Pending"],

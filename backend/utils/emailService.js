@@ -16,10 +16,10 @@ const createTransporter = () => {
   });
 };
 
-const sendEmail = async ({ to, subject, html }) => {
+const sendEmail = async ({ to, subject, html, attachments = [] }) => {
   if (!hasSmtpConfig()) {
     console.log("Email not sent because SMTP is not configured.");
-    console.log({ to, subject, html });
+    console.log({ to, subject, html, attachments: attachments.map((item) => item.filename) });
     return { sent: false, reason: "SMTP is not configured" };
   }
 
@@ -30,6 +30,7 @@ const sendEmail = async ({ to, subject, html }) => {
     to,
     subject,
     html,
+    attachments,
   });
 
   return { sent: true };
