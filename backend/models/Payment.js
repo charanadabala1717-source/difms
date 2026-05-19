@@ -38,6 +38,13 @@ const paymentSchema = new mongoose.Schema(
     notes: {
       type: String,
     },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+    deletedAt: {
+      type: Date,
+    },
   },
   { timestamps: true }
 );

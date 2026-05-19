@@ -18,6 +18,7 @@ const recordPayment = async (req, res) => {
     const invoice = await Invoice.findOne({
       _id: invoiceId,
       user: req.user._id,
+      isDeleted: { $ne: true },
     });
 
     if (!invoice) {
@@ -55,12 +56,12 @@ const recordPayment = async (req, res) => {
 
 const getPayments = async (req, res) => {
   try {
-    const payments = await Payment.find({ user: req.user._id })
+    const payments = await Payment.find({ user: req.user._id, isDeleted: { $ne: true } })
       .populate("invoice")
       .populate("customer")
       .sort({ createdAt: -1 });
 
-    res.json(payments);
+    res.json(payments.filter((payment) => payment.customer && payment.invoice));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -71,6 +72,7 @@ const getPaymentsByInvoice = async (req, res) => {
     const invoice = await Invoice.findOne({
       _id: req.params.invoiceId,
       user: req.user._id,
+      isDeleted: { $ne: true },
     });
 
     if (!invoice) {
@@ -80,12 +82,13 @@ const getPaymentsByInvoice = async (req, res) => {
     const payments = await Payment.find({
       user: req.user._id,
       invoice: req.params.invoiceId,
+      isDeleted: { $ne: true },
     })
       .populate("invoice")
       .populate("customer")
       .sort({ createdAt: -1 });
 
-    res.json(payments);
+    res.json(payments.filter((payment) => payment.customer && payment.invoice));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -96,6 +99,7 @@ const getReceiptById = async (req, res) => {
     const receipt = await Receipt.findOne({
       _id: req.params.id,
       user: req.user._id,
+      isDeleted: { $ne: true },
     })
       .populate("payment")
       .populate("invoice")
@@ -116,6 +120,7 @@ const getReceiptByPayment = async (req, res) => {
     const receipt = await Receipt.findOne({
       payment: req.params.paymentId,
       user: req.user._id,
+      isDeleted: { $ne: true },
     })
       .populate("payment")
       .populate("invoice")

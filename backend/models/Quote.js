@@ -77,6 +77,13 @@ const quoteSchema = new mongoose.Schema(
     declinedAt: {
       type: Date,
     },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+    deletedAt: {
+      type: Date,
+    },
   },
   { timestamps: true }
 );

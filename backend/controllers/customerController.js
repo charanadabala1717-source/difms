@@ -1,5 +1,8 @@
 const Customer = require("../models/Customer");
+const Invoice = require("../models/Invoice");
+const Payment = require("../models/Payment");
 const Quote = require("../models/Quote");
+const Receipt = require("../models/Receipt");
 const { createNumber, createToken, sendQuoteEmail } = require("../utils/flowHelpers");
 
 const createCustomer = async (req, res) => {
@@ -43,7 +46,10 @@ const createCustomer = async (req, res) => {
 
 const getCustomers = async (req, res) => {
   try {
-    const customers = await Customer.find({ user: req.user._id }).sort({ createdAt: -1 });
+    const customers = await Customer.find({
+      user: req.user._id,
+      isDeleted: { $ne: true },
+    }).sort({ createdAt: -1 });
     res.json(customers);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -55,6 +61,7 @@ const getCustomerById = async (req, res) => {
     const customer = await Customer.findOne({
       _id: req.params.id,
       user: req.user._id,
+      isDeleted: { $ne: true },
     });
 
     if (!customer) {
@@ -70,7 +77,7 @@ const getCustomerById = async (req, res) => {
 const updateCustomer = async (req, res) => {
   try {
     const customer = await Customer.findOneAndUpdate(
-      { _id: req.params.id, user: req.user._id },
+      { _id: req.params.id, user: req.user._id, isDeleted: { $ne: true } },
       req.body,
       { new: true, runValidators: true }
     );
@@ -87,16 +94,36 @@ const updateCustomer = async (req, res) => {
 
 const deleteCustomer = async (req, res) => {
   try {
-    const customer = await Customer.findOneAndDelete({
-      _id: req.params.id,
-      user: req.user._id,
-    });
+    const customer = await Customer.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        user: req.user._id,
+        isDeleted: { $ne: true },
+      },
+      {
+        isDeleted: true,
+        deletedAt: new Date(),
+      },
+      { new: true }
+    );
 
     if (!customer) {
       return res.status(404).json({ message: "Customer not found" });
     }
 
-    res.json({ message: "Customer deleted" });
+    const softDelete = {
+      isDeleted: true,
+      deletedAt: new Date(),
+    };
+
+    await Promise.all([
+      Receipt.updateMany({ customer: customer._id, user: req.user._id }, softDelete),
+      Payment.updateMany({ customer: customer._id, user: req.user._id }, softDelete),
+      Invoice.updateMany({ customer: customer._id, user: req.user._id }, softDelete),
+      Quote.updateMany({ customer: customer._id, user: req.user._id }, softDelete),
+    ]);
+
+    res.json({ message: "Customer and related records deleted" });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -107,6 +134,7 @@ const sendCustomerQuoteEmail = async (req, res) => {
     const customer = await Customer.findOne({
       _id: req.params.id,
       user: req.user._id,
+      isDeleted: { $ne: true },
     });
 
     if (!customer) {

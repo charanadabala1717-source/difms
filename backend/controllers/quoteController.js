@@ -49,6 +49,7 @@ const createQuote = async (req, res) => {
     const existingCustomer = await Customer.findOne({
       _id: customer,
       user: req.user._id,
+      isDeleted: { $ne: true },
     });
 
     if (!existingCustomer) {
@@ -78,11 +79,11 @@ const createQuote = async (req, res) => {
 
 const getQuotes = async (req, res) => {
   try {
-    const quotes = await Quote.find({ user: req.user._id })
+    const quotes = await Quote.find({ user: req.user._id, isDeleted: { $ne: true } })
       .populate("customer")
       .sort({ createdAt: -1 });
 
-    res.json(quotes);
+    res.json(quotes.filter((quote) => quote.customer));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -93,9 +94,10 @@ const getQuoteById = async (req, res) => {
     const quote = await Quote.findOne({
       _id: req.params.id,
       user: req.user._id,
+      isDeleted: { $ne: true },
     }).populate("customer");
 
-    if (!quote) {
+    if (!quote || !quote.customer) {
       return res.status(404).json({ message: "Quote not found" });
     }
 
@@ -110,6 +112,7 @@ const updateQuote = async (req, res) => {
     const quote = await Quote.findOne({
       _id: req.params.id,
       user: req.user._id,
+      isDeleted: { $ne: true },
     });
 
     if (!quote) {
@@ -126,6 +129,7 @@ const updateQuote = async (req, res) => {
       const existingCustomer = await Customer.findOne({
         _id: customer,
         user: req.user._id,
+        isDeleted: { $ne: true },
       });
 
       if (!existingCustomer) {
@@ -166,9 +170,10 @@ const acceptQuote = async (req, res) => {
     const quote = await Quote.findOne({
       _id: req.params.id,
       user: req.user._id,
+      isDeleted: { $ne: true },
     }).populate("customer");
 
-    if (!quote) {
+    if (!quote || !quote.customer) {
       return res.status(404).json({ message: "Quote not found" });
     }
 
@@ -190,6 +195,7 @@ const convertQuoteToInvoice = async (req, res) => {
     const quote = await Quote.findOne({
       _id: req.params.id,
       user: req.user._id,
+      isDeleted: { $ne: true },
     });
 
     if (!quote) {
@@ -203,6 +209,7 @@ const convertQuoteToInvoice = async (req, res) => {
     const existingInvoice = await Invoice.findOne({
       quote: quote._id,
       user: req.user._id,
+      isDeleted: { $ne: true },
     });
 
     if (existingInvoice) {

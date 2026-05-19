@@ -31,6 +31,7 @@ const createInvoiceFromQuote = async (quote, dueDate) => {
   const existingInvoice = await Invoice.findOne({
     quote: quote._id,
     user: quote.user,
+    isDeleted: { $ne: true },
   });
 
   if (existingInvoice) {
@@ -59,7 +60,10 @@ const createInvoiceFromQuote = async (quote, dueDate) => {
 };
 
 const sendQuoteEmail = async (quote) => {
-  const populatedQuote = await Quote.findById(quote._id).populate("customer");
+  const populatedQuote = await Quote.findOne({
+    _id: quote._id,
+    isDeleted: { $ne: true },
+  }).populate("customer");
   const customer = populatedQuote.customer;
 
   if (!customer.email) {
@@ -94,7 +98,10 @@ const sendQuoteEmail = async (quote) => {
 };
 
 const sendPaymentEmail = async (invoice) => {
-  const populatedInvoice = await Invoice.findById(invoice._id).populate("customer");
+  const populatedInvoice = await Invoice.findOne({
+    _id: invoice._id,
+    isDeleted: { $ne: true },
+  }).populate("customer");
   const customer = populatedInvoice.customer;
 
   if (!customer.email) {

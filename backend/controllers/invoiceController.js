@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const Customer = require("../models/Customer");
 const Invoice = require("../models/Invoice");
+const Payment = require("../models/Payment");
 const Receipt = require("../models/Receipt");
 const { sendEmail } = require("../utils/emailService");
 const { syncCustomerStatusFromInvoice } = require("../utils/customerStatus");
@@ -16,7 +17,7 @@ const getInvoiceStatus = (amountPaid, total, currentStatus = "sent") => {
 
 const getInvoices = async (req, res) => {
   try {
-    const invoices = await Invoice.find({ user: req.user._id })
+    const invoices = await Invoice.find({ user: req.user._id, isDeleted: { $ne: true } })
       .populate("customer")
       .populate("quote")
       .sort({ createdAt: -1 });
@@ -37,7 +38,7 @@ const getInvoices = async (req, res) => {
       })
     );
 
-    res.json(normalizedInvoices);
+    res.json(normalizedInvoices.filter((invoice) => invoice.customer));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -55,6 +56,39 @@ const getReceiptLogoPath = () => {
   }
 
   return path.join(__dirname, "..", "assets", "intern.jpg");
+};
+
+const getReceiptContext = async (invoiceId, userId) => {
+  const invoice = await Invoice.findOne({
+    _id: invoiceId,
+    user: userId,
+    isDeleted: { $ne: true },
+  }).populate("customer");
+
+  if (!invoice) {
+    return { error: { status: 404, message: "Invoice not found" } };
+  }
+
+  if (invoice.status !== "paid" && invoice.balanceDue > 0) {
+    return {
+      error: {
+        status: 400,
+        message: "Receipt is available only after payment is complete",
+      },
+    };
+  }
+
+  const receipt = await Receipt.findOne({
+    invoice: invoice._id,
+    user: userId,
+    isDeleted: { $ne: true },
+  }).sort({ createdAt: -1 });
+
+  if (!receipt) {
+    return { error: { status: 404, message: "Receipt not found for this invoice" } };
+  }
+
+  return { invoice, receipt };
 };
 
 const mapUiStatusToInvoiceStatus = (status) => {
@@ -81,10 +115,11 @@ const createInvoice = async (req, res) => {
       invoiceCustomer = await Customer.findOne({
         _id: customer,
         user: req.user._id,
+        isDeleted: { $ne: true },
       });
     } else {
       invoiceCustomer = await Customer.findOneAndUpdate(
-        { name: customerName, user: req.user._id },
+        { name: customerName, user: req.user._id, isDeleted: { $ne: true } },
         { name: customerName, user: req.user._id },
         { new: true, upsert: true }
       );
@@ -133,6 +168,7 @@ const getInvoiceById = async (req, res) => {
     const invoice = await Invoice.findOne({
       _id: req.params.id,
       user: req.user._id,
+      isDeleted: { $ne: true },
     })
       .populate("customer")
       .populate("quote");
@@ -152,6 +188,7 @@ const updateInvoice = async (req, res) => {
     const invoice = await Invoice.findOne({
       _id: req.params.id,
       user: req.user._id,
+      isDeleted: { $ne: true },
     });
 
     if (!invoice) {
@@ -168,7 +205,7 @@ const updateInvoice = async (req, res) => {
 
     if (customerName !== undefined) {
       await Customer.findOneAndUpdate(
-        { _id: invoice.customer, user: req.user._id },
+        { _id: invoice.customer, user: req.user._id, isDeleted: { $ne: true } },
         { name: customerName },
         { new: true }
       );
@@ -208,16 +245,35 @@ const updateInvoice = async (req, res) => {
 
 const deleteInvoice = async (req, res) => {
   try {
-    const invoice = await Invoice.findOneAndDelete({
-      _id: req.params.id,
-      user: req.user._id,
-    });
+    const invoice = await Invoice.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        user: req.user._id,
+        isDeleted: { $ne: true },
+      },
+      {
+        isDeleted: true,
+        deletedAt: new Date(),
+      },
+      { new: true }
+    );
 
     if (!invoice) {
       return res.status(404).json({ message: "Invoice not found" });
     }
 
-    res.json({ message: "Invoice deleted" });
+    await Promise.all([
+      Receipt.updateMany(
+        { invoice: invoice._id, user: req.user._id },
+        { isDeleted: true, deletedAt: new Date() }
+      ),
+      Payment.updateMany(
+        { invoice: invoice._id, user: req.user._id },
+        { isDeleted: true, deletedAt: new Date() }
+      ),
+    ]);
+
+    res.json({ message: "Invoice and related payment records deleted" });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -225,30 +281,17 @@ const deleteInvoice = async (req, res) => {
 
 const sendReceiptEmail = async (req, res) => {
   try {
-    const invoice = await Invoice.findOne({
-      _id: req.params.id,
-      user: req.user._id,
-    }).populate("customer");
+    const { invoice, receipt, error: receiptError } = await getReceiptContext(
+      req.params.id,
+      req.user._id
+    );
 
-    if (!invoice) {
-      return res.status(404).json({ message: "Invoice not found" });
-    }
-
-    if (invoice.status !== "paid" && invoice.balanceDue > 0) {
-      return res.status(400).json({ message: "Receipt can be sent only after payment is complete" });
+    if (receiptError) {
+      return res.status(receiptError.status).json({ message: receiptError.message });
     }
 
     if (!invoice.customer.email) {
       return res.status(400).json({ message: "Customer email is required to send receipt" });
-    }
-
-    const receipt = await Receipt.findOne({
-      invoice: invoice._id,
-      user: req.user._id,
-    }).sort({ createdAt: -1 });
-
-    if (!receipt) {
-      return res.status(404).json({ message: "Receipt not found for this invoice" });
     }
 
     const logoPath = getReceiptLogoPath();
@@ -378,11 +421,55 @@ const sendReceiptEmail = async (req, res) => {
   }
 };
 
+const downloadReceiptPdf = async (req, res) => {
+  try {
+    const invoice = await Invoice.findOne({
+      _id: req.params.id,
+      user: req.user._id,
+      isDeleted: { $ne: true },
+    }).populate("customer");
+
+    if (!invoice) {
+      return res.status(404).json({ message: "Invoice not found" });
+    }
+
+    if (!invoice.customer) {
+      return res.status(404).json({ message: "Customer not found for this invoice" });
+    }
+
+    const receipt =
+      (await Receipt.findOne({
+        invoice: invoice._id,
+        user: req.user._id,
+        isDeleted: { $ne: true },
+      }).sort({ createdAt: -1 })) || {
+        receiptNumber: invoice.invoiceNumber,
+        amount: invoice.amountPaid || 0,
+        paymentDate: invoice.paidAt || invoice.updatedAt || invoice.createdAt || new Date(),
+        method: invoice.status === "paid" ? "recorded" : "pending",
+      };
+
+    const pdfBuffer = await generateReceiptPdf({
+      receipt,
+      invoice,
+      customer: invoice.customer,
+      logoPath: getReceiptLogoPath(),
+    });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${receipt.receiptNumber}.pdf"`);
+    res.send(pdfBuffer);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 const sendInvoice = async (req, res) => {
   try {
     const invoice = await Invoice.findOne({
       _id: req.params.id,
       user: req.user._id,
+      isDeleted: { $ne: true },
     });
 
     if (!invoice) {
@@ -409,6 +496,7 @@ module.exports = {
   updateInvoice,
   sendInvoice,
   sendReceiptEmail,
+  downloadReceiptPdf,
   deleteInvoice,
   getInvoiceStatus,
 };

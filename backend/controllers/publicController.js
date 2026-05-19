@@ -37,6 +37,7 @@ const findQuoteByToken = async (token) => {
   return Quote.findOne({
     actionToken: token,
     actionTokenExpires: { $gt: new Date() },
+    isDeleted: { $ne: true },
   }).populate("customer");
 };
 
@@ -44,7 +45,7 @@ const acceptPublicQuote = async (req, res) => {
   try {
     const quote = await findQuoteByToken(req.params.token);
 
-    if (!quote) {
+    if (!quote || !quote.customer) {
       return res.status(404).send(renderMessage("Quote not found", "This quote link is invalid or expired."));
     }
 
@@ -91,7 +92,7 @@ const declinePublicQuote = async (req, res) => {
   try {
     const quote = await findQuoteByToken(req.params.token);
 
-    if (!quote) {
+    if (!quote || !quote.customer) {
       return res.status(404).send(renderMessage("Quote not found", "This quote link is invalid or expired."));
     }
 
@@ -126,9 +127,10 @@ const openPayment = async (req, res) => {
     const invoice = await Invoice.findOne({
       paymentToken: req.params.token,
       status: { $ne: "cancelled" },
+      isDeleted: { $ne: true },
     }).populate("customer");
 
-    if (!invoice) {
+    if (!invoice || !invoice.customer) {
       return res.status(404).send(renderMessage("Invoice not found", "This payment link is invalid."));
     }
 
@@ -201,6 +203,7 @@ const manualPaymentSuccess = async (req, res) => {
     const invoice = await Invoice.findOne({
       paymentToken: req.params.token,
       status: { $ne: "cancelled" },
+      isDeleted: { $ne: true },
     });
 
     if (!invoice) {
@@ -228,6 +231,7 @@ const stripePaymentSuccess = async (req, res) => {
     const invoice = await Invoice.findOne({
       paymentToken: req.params.token,
       status: { $ne: "cancelled" },
+      isDeleted: { $ne: true },
     });
 
     if (!invoice) {
