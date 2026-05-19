@@ -2,9 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Mail, Pencil, Trash2, Search, X, FileDown } from "lucide-react";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
-import { apiRequest } from "../../difm/lib/api";
+import { apiBlobRequest, apiRequest } from "../../difm/lib/api";
 
 type InvoiceStatus = "Paid" | "Pending" | "Overdue";
 
@@ -65,6 +63,7 @@ export default function InvoicesPage() {
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [sendingReceiptId, setSendingReceiptId] = useState<string | null>(null);
+  const [downloadingReceiptId, setDownloadingReceiptId] = useState<string | null>(null);
 
   const loadInvoices = useCallback(async () => {
     try {
@@ -166,34 +165,27 @@ export default function InvoicesPage() {
     }
   };
 
-  const handleDownloadPdf = (invoice: InvoiceRow) => {
-    const doc = new jsPDF();
+  const handleDownloadPdf = async (invoice: InvoiceRow) => {
+    try {
+      setError("");
+      setSuccessMessage("");
+      setDownloadingReceiptId(invoice.id);
 
-    doc.setFontSize(18);
-    doc.text("DIFMS Invoice", 14, 18);
+      const { blob, filename } = await apiBlobRequest(`/invoices/${invoice.id}/receipt-pdf`);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
 
-    autoTable(doc, {
-      startY: 30,
-      head: [["Invoice ID", "Customer Name", "Amount", "Status"]],
-      body: [[invoice.invoiceId, invoice.customerName, `£${invoice.amount}`, invoice.status]],
-      theme: "grid",
-      headStyles: {
-        fillColor: [37, 99, 235],
-        textColor: 255,
-        fontStyle: "bold",
-      },
-      bodyStyles: {
-        textColor: 30,
-      },
-      styles: {
-        halign: "left",
-        valign: "middle",
-        lineColor: [200, 200, 200],
-        lineWidth: 0.2,
-      },
-    });
-
-    doc.save(`${invoice.invoiceId}.pdf`);
+      link.href = url;
+      link.download = filename || `${invoice.invoiceId}-receipt.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to download receipt PDF");
+    } finally {
+      setDownloadingReceiptId(null);
+    }
   };
 
   const handleSendReceiptEmail = async (invoice: InvoiceRow) => {
@@ -230,7 +222,7 @@ export default function InvoicesPage() {
 
   return (
     <div className="min-h-screen">
-      <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-white sm:text-4xl">
             Invoices
@@ -240,8 +232,8 @@ export default function InvoicesPage() {
           </p>
         </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <div className="relative">
+        <div className="flex flex-col gap-3 sm:flex-row lg:items-center">
+          <div className="relative w-full sm:w-auto">
             <Search
               size={18}
               className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
@@ -278,7 +270,7 @@ export default function InvoicesPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-full border-separate border-spacing-y-3">
+          <table className="min-w-max border-separate border-spacing-y-3">
             <thead>
               <tr>
                 <th className="px-4 text-left text-sm font-semibold text-slate-400">
@@ -345,8 +337,10 @@ export default function InvoicesPage() {
 
                         <button
                           onClick={() => handleDownloadPdf(invoice)}
-                          className="cursor-pointer rounded-lg bg-emerald-500/10 p-2 text-emerald-400 transition hover:bg-emerald-500/20"
+                          disabled={downloadingReceiptId === invoice.id}
+                          className="cursor-pointer rounded-lg bg-emerald-500/10 p-2 text-emerald-400 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
                           aria-label={`Download PDF ${invoice.invoiceId}`}
+                          title="Download PDF"
                         >
                           <FileDown size={16} />
                         </button>
@@ -398,7 +392,7 @@ export default function InvoicesPage() {
             onClick={closeModal}
           />
 
-          <div className="fixed left-1/2 top-1/2 z-50 w-[92%] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-slate-700 bg-slate-900 p-6 text-white shadow-2xl">
+          <div className="fixed inset-x-4 top-4 z-50 max-h-screen overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-4 text-white shadow-2xl sm:left-1/2 sm:top-1/2 sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:p-6">
             <div className="mb-5 flex items-center justify-between">
               <div>
                 <h2 className="text-2xl font-semibold">
@@ -470,7 +464,7 @@ export default function InvoicesPage() {
                 </select>
               </div>
 
-              <div className="flex justify-end gap-3 pt-2">
+              <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
                 <button
                   type="button"
                   onClick={closeModal}

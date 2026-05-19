@@ -43,3 +43,32 @@ export const apiRequest = async <T>(
 
   return data as T;
 };
+
+export const apiBlobRequest = async (
+  endpoint: string,
+  options: RequestOptions = {}
+): Promise<{ blob: Blob; filename?: string }> => {
+  const { skipAuth, headers, ...rest } = options;
+  const token = getToken();
+
+  const response = await fetch(`${API_URL}${endpoint}`, {
+    ...rest,
+    headers: {
+      ...(token && !skipAuth ? { Authorization: `Bearer ${token}` } : {}),
+      ...headers,
+    },
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new Error(data?.message || "Request failed");
+  }
+
+  const contentDisposition = response.headers.get("Content-Disposition");
+  const filename = contentDisposition?.match(/filename="?([^"]+)"?/)?.[1];
+
+  return {
+    blob: await response.blob(),
+    filename,
+  };
+};

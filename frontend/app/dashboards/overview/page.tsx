@@ -89,14 +89,14 @@ function StatCard({
 }: {
   title: string;
   value: string;
-  trend: string;
-  trendColor: string;
+  trend?: string;
+  trendColor?: string;
 }) {
   return (
-    <div className="cursor-pointer rounded-2xl border border-slate-700 bg-slate-700 p-5 text-white shadow-lg transition duration-300 hover:-translate-y-1 hover:shadow-xl">
+    <div className="cursor-pointer rounded-2xl border border-slate-700 bg-slate-700 p-4 text-white shadow-lg transition duration-300 hover:-translate-y-1 hover:shadow-xl sm:p-5">
       <h2 className="text-sm font-medium text-slate-400">{title}</h2>
-      <p className="mt-3 text-3xl font-bold">{value}</p>
-      <p className={`mt-2 text-sm font-medium ${trendColor}`}>{trend}</p>
+      <p className="mt-3 break-words text-2xl font-bold sm:text-3xl">{value}</p>
+      {trend && <p className={`mt-2 text-sm font-medium ${trendColor || "text-slate-400"}`}>{trend}</p>}
     </div>
   );
 }
@@ -234,24 +234,14 @@ export default function OverviewPage() {
       )}
 
       {/* Main Stats */}
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
         <StatCard
           title="Total Customers"
           value={String(overview.totalCustomers)}
-          trend="Live from MongoDB"
-          trendColor="text-green-400"
         />
         <StatCard
           title="Invoices"
           value={String(overview.totalInvoices)}
-          trend="Live from MongoDB"
-          trendColor="text-green-400"
-        />
-        <StatCard
-          title="Feedback"
-          value="0"
-          trend="Not connected yet"
-          trendColor="text-green-400"
         />
         <StatCard
           title="Open Tickets"
@@ -292,13 +282,13 @@ export default function OverviewPage() {
       {/* Charts */}
       <div className="mt-8 grid grid-cols-1 gap-6 xl:grid-cols-3">
         {/* Revenue Split */}
-        <div className="cursor-pointer rounded-2xl border border-slate-700 bg-slate-700 p-6 text-white shadow-lg transition duration-300 hover:shadow-xl xl:col-span-1">
+        <div className="min-w-0 cursor-pointer rounded-2xl border border-slate-700 bg-slate-700 p-4 text-white shadow-lg transition duration-300 hover:shadow-xl sm:p-6 xl:col-span-1">
           <h2 className="text-xl font-semibold">Revenue Split</h2>
           <p className="mt-1 text-sm text-slate-300">
             Weekly, monthly, and annual distribution.
           </p>
 
-          <div className="mt-6 h-[260px] w-full">
+          <div className="mt-6 h-64 min-w-0">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -338,13 +328,13 @@ export default function OverviewPage() {
         </div>
 
         {/* Revenue Growth */}
-        <div className="cursor-pointer rounded-2xl border border-slate-700 bg-slate-700 p-6 text-white shadow-lg transition duration-300 hover:shadow-xl xl:col-span-2">
+        <div className="min-w-0 cursor-pointer rounded-2xl border border-slate-700 bg-slate-700 p-4 text-white shadow-lg transition duration-300 hover:shadow-xl sm:p-6 xl:col-span-2">
           <h2 className="text-xl font-semibold">Revenue Growth</h2>
           <p className="mt-1 text-sm text-slate-300">
             Monthly revenue trend for the current period.
           </p>
 
-          <div className="mt-6 h-[300px] w-full">
+          <div className="mt-6 h-72 min-w-0">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={overview.revenueGrowthData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
@@ -366,7 +356,7 @@ export default function OverviewPage() {
       </div>
 
       {/* Invoice Status */}
-      <div className="mt-8 cursor-pointer rounded-2xl bg-gradient-to-r from-slate-600 to-slate-900 p-6 text-white shadow-lg transition duration-300 hover:shadow-xl">
+      <div className="mt-8 cursor-pointer rounded-2xl bg-gradient-to-r from-slate-600 to-slate-900 p-4 text-white shadow-lg transition duration-300 hover:shadow-xl sm:p-6">
         <h2 className="text-xl font-semibold">Invoice Status Overview</h2>
         <p className="mt-1 text-sm text-slate-300">
           Comparison of paid, pending, and overdue invoices.
@@ -421,7 +411,7 @@ export default function OverviewPage() {
       </div>
 
       {/* Recent Transactions */}
-      <div className="mt-8 cursor-pointer rounded-2xl border border-slate-700 bg-slate-700 p-6 text-white shadow-lg transition duration-300 hover:shadow-xl">
+      <div className="mt-8 cursor-pointer rounded-2xl border border-slate-700 bg-slate-700 p-4 text-white shadow-lg transition duration-300 hover:shadow-xl sm:p-6">
         <div className="mb-4">
           <h2 className="text-xl font-semibold">Recent Transactions</h2>
           <p className="mt-1 text-sm text-slate-300">
@@ -430,7 +420,7 @@ export default function OverviewPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-full border-separate border-spacing-y-3">
+          <table className="min-w-max border-separate border-spacing-y-3">
             <thead>
               <tr>
                 <th className="px-4 text-left text-sm font-semibold text-slate-400">

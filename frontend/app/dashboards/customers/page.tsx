@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Mail, Plus, Pencil, Trash2, Search, X } from "lucide-react";
+import { ChevronDown, Mail, Plus, Pencil, Trash2, Search, X } from "lucide-react";
 import { apiRequest } from "../../difm/lib/api";
 
 type CustomerStatus = "Paid" | "Unpaid" | "Pending";
@@ -298,6 +298,8 @@ export default function CustomersPage() {
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [sendingQuoteId, setSendingQuoteId] = useState<string | null>(null);
+  const [countrySearch, setCountrySearch] = useState("");
+  const [isCountryDropdownOpen, setIsCountryDropdownOpen] = useState(false);
 
   const mapCustomer = (customer: CustomerResponse, index: number): CustomerRow => ({
     id: customer._id,
@@ -343,9 +345,27 @@ export default function CustomersPage() {
     );
   }, [customers, searchTerm]);
 
+  const selectedCountry = useMemo(() => {
+    return countryCodes.find((country) => country.code === formData.countryCode) || countryCodes[0];
+  }, [formData.countryCode]);
+
+  const filteredCountryCodes = useMemo(() => {
+    const query = countrySearch.trim().toLowerCase();
+
+    if (!query) return countryCodes;
+
+    return countryCodes.filter(
+      (country) =>
+        country.code.toLowerCase().includes(query) ||
+        country.label.toLowerCase().includes(query)
+    );
+  }, [countrySearch]);
+
   const openAddModal = () => {
     setEditingCustomerId(null);
     setFormData(emptyForm);
+    setCountrySearch("");
+    setIsCountryDropdownOpen(false);
     setIsModalOpen(true);
   };
 
@@ -360,6 +380,8 @@ export default function CustomersPage() {
       totalAmount: customer.totalAmount,
       status: customer.status,
     });
+    setCountrySearch("");
+    setIsCountryDropdownOpen(false);
     setIsModalOpen(true);
   };
 
@@ -367,6 +389,17 @@ export default function CustomersPage() {
     setIsModalOpen(false);
     setEditingCustomerId(null);
     setFormData(emptyForm);
+    setCountrySearch("");
+    setIsCountryDropdownOpen(false);
+  };
+
+  const handleCountrySelect = (code: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      countryCode: code,
+    }));
+    setCountrySearch("");
+    setIsCountryDropdownOpen(false);
   };
 
   const handleDelete = async (id: string) => {
@@ -489,7 +522,7 @@ export default function CustomersPage() {
 
   return (
     <div className="min-h-screen">
-      <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-white sm:text-4xl">
             Customers
@@ -499,8 +532,8 @@ export default function CustomersPage() {
           </p>
         </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <div className="relative">
+        <div className="flex flex-col gap-3 sm:flex-row lg:items-center">
+          <div className="relative w-full sm:w-auto">
             <Search
               size={18}
               className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
@@ -545,7 +578,7 @@ export default function CustomersPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-full border-separate border-spacing-y-3">
+          <table className="min-w-max border-separate border-spacing-y-3">
             <thead>
               <tr>
                 <th className="px-4 text-left text-sm font-semibold text-slate-400">
@@ -670,7 +703,7 @@ export default function CustomersPage() {
             onClick={closeModal}
           />
 
-          <div className="fixed left-1/2 top-1/2 z-50 w-[92%] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-slate-700 bg-slate-900 p-6 text-white shadow-2xl">
+          <div className="fixed inset-x-4 top-4 z-50 max-h-screen overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-4 text-white shadow-2xl sm:left-1/2 sm:top-1/2 sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:p-6">
             <div className="mb-5 flex items-center justify-between">
               <div>
                 <h2 className="text-2xl font-semibold">
@@ -740,19 +773,64 @@ export default function CustomersPage() {
                 <label className="mb-2 block text-sm font-medium text-slate-300">
                   Phone Number
                 </label>
-                <div className="grid grid-cols-3 gap-3">
-                  <select
-                    name="countryCode"
-                    value={formData.countryCode}
-                    onChange={handleChange}
-                    className="rounded-xl border border-slate-700 bg-slate-800 px-3 py-3 text-sm text-white outline-none transition focus:border-blue-500"
-                  >
-                    {countryCodes.map((country) => (
-                      <option key={`${country.code}-${country.label}`} value={country.code}>
-                        {country.code} {country.label}
-                      </option>
-                    ))}
-                  </select>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setIsCountryDropdownOpen((prev) => !prev)}
+                      className="flex w-full cursor-pointer items-center justify-between gap-2 rounded-xl border border-slate-700 bg-slate-800 px-3 py-3 text-left text-sm text-white outline-none transition hover:border-slate-500 focus:border-blue-500"
+                    >
+                      <span className="truncate">{selectedCountry.code}</span>
+                      <ChevronDown size={16} className="shrink-0 text-slate-400" />
+                    </button>
+
+                    {isCountryDropdownOpen && (
+                      <div className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl sm:right-auto sm:w-72">
+                        <div className="border-b border-slate-700 p-2">
+                          <div className="relative">
+                            <Search
+                              size={16}
+                              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                            />
+                            <input
+                              type="text"
+                              value={countrySearch}
+                              onChange={(event) => setCountrySearch(event.target.value)}
+                              placeholder="Search country code"
+                              className="w-full rounded-lg border border-slate-700 bg-slate-800 py-2 pl-9 pr-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-blue-500"
+                              autoFocus
+                            />
+                          </div>
+                        </div>
+
+                        <div className="max-h-56 overflow-y-auto py-1">
+                          {filteredCountryCodes.length > 0 ? (
+                            filteredCountryCodes.map((country) => (
+                              <button
+                                key={`${country.code}-${country.label}`}
+                                type="button"
+                                onClick={() => handleCountrySelect(country.code)}
+                                className={`flex w-full cursor-pointer items-center justify-between gap-3 px-3 py-2 text-left text-sm transition hover:bg-slate-800 ${
+                                  formData.countryCode === country.code
+                                    ? "bg-blue-500/15 text-blue-300"
+                                    : "text-slate-200"
+                                }`}
+                              >
+                                <span className="font-semibold">{country.code}</span>
+                                <span className="min-w-0 flex-1 truncate text-slate-300">
+                                  {country.label}
+                                </span>
+                              </button>
+                            ))
+                          ) : (
+                            <p className="px-3 py-4 text-center text-sm text-slate-400">
+                              No country code found.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
                   <input
                     type="text"
@@ -760,7 +838,7 @@ export default function CustomersPage() {
                     value={formData.phoneNumber}
                     onChange={handleChange}
                     placeholder="Enter number"
-                    className="col-span-2 rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-blue-500"
+                    className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-blue-500 sm:col-span-2"
                     required
                   />
                 </div>
@@ -802,7 +880,7 @@ export default function CustomersPage() {
                 </select>
               </div>
 
-              <div className="flex justify-end gap-3 pt-2">
+              <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
                 <button
                   type="button"
                   onClick={closeModal}
