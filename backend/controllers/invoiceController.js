@@ -15,6 +15,26 @@ const getInvoiceStatus = (amountPaid, total, currentStatus = "sent") => {
   return "paid";
 };
 
+const formatInvoiceStatus = (invoice) => {
+  const total = Number(invoice.total) || 0;
+  const amountPaid = Number(invoice.amountPaid) || 0;
+  const balanceDue = Number(invoice.balanceDue ?? total - amountPaid) || 0;
+
+  if (invoice.status === "paid" || balanceDue <= 0 || amountPaid >= total) {
+    return "Paid";
+  }
+
+  if (invoice.status === "overdue") {
+    return "Overdue";
+  }
+
+  if (amountPaid > 0) {
+    return "Partially Paid";
+  }
+
+  return "Pending";
+};
+
 const getInvoices = async (req, res) => {
   try {
     const invoices = await Invoice.find({ user: req.user._id, isDeleted: { $ne: true } })
@@ -304,10 +324,10 @@ const sendReceiptEmail = async (req, res) => {
       logoPath,
     });
 
-    const companyName = process.env.COMPANY_NAME || "DIFMS";
+    const companyName = process.env.COMPANY_NAME || "Brent labs";
     const companyAddress =
       process.env.COMPANY_ADDRESS ||
-      "DIFMS Accounts Department, London, United Kingdom";
+      "Brent labs Accounts Department, London, United Kingdom";
 
     const logoHtml = hasLogoFile
       ? `<img src="cid:receipt-logo" alt="${companyName}" style="height:56px;width:56px;object-fit:cover;border-radius:10px;display:block;" />`
@@ -328,7 +348,7 @@ const sendReceiptEmail = async (req, res) => {
 
     await sendEmail({
       to: invoice.customer.email,
-      subject: `Receipt ${receipt.receiptNumber} for invoice ${invoice.invoiceNumber}`,
+      subject: `Receipt ${receipt.receiptNumber}`,
       html: `
         <div style="margin:0;padding:0;background:#f8fafc;font-family:Arial,sans-serif;color:#0f172a;">
           <div style="max-width:680px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;">
@@ -352,8 +372,8 @@ const sendReceiptEmail = async (req, res) => {
                   <td style="padding:10px;border:1px solid #e2e8f0;">${receipt.receiptNumber}</td>
                 </tr>
                 <tr>
-                  <td style="padding:10px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:700;">Invoice Number</td>
-                  <td style="padding:10px;border:1px solid #e2e8f0;">${invoice.invoiceNumber}</td>
+                  <td style="padding:10px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:700;">Status</td>
+                  <td style="padding:10px;border:1px solid #e2e8f0;">${formatInvoiceStatus(invoice)}</td>
                 </tr>
                 <tr>
                   <td style="padding:10px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:700;">Customer</td>

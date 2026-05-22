@@ -3,6 +3,7 @@ const Invoice = require("../models/Invoice");
 const Quote = require("../models/Quote");
 const { sendEmail } = require("./emailService");
 const { syncCustomerStatusFromInvoice } = require("./customerStatus");
+const { generateReceiptPdf } = require("./receiptPdf");
 
 const createNumber = (prefix) => {
   return `${prefix}-${Date.now()}`;
@@ -25,6 +26,36 @@ const formatCurrency = (amount) => {
     style: "currency",
     currency: "GBP",
   }).format(Number(amount) || 0);
+};
+
+const formatStatus = (record) => {
+  const total = Number(record.total) || 0;
+  const amountPaid = Number(record.amountPaid) || 0;
+  const balanceDue = Number(record.balanceDue ?? total - amountPaid) || 0;
+
+  if (record.status === "paid" || balanceDue <= 0 || amountPaid >= total) {
+    return "Paid";
+  }
+
+  if (amountPaid > 0) {
+    return "Partially Paid";
+  }
+
+  return "Pending";
+};
+
+const formatServiceRows = (items = []) => {
+  return items
+    .map(
+      (item) => `
+        <tr>
+          <td>${item.name || "Service"}</td>
+          <td>${item.quantity || 1}</td>
+          <td>${formatCurrency(item.total)}</td>
+        </tr>
+      `
+    )
+    .join("");
 };
 
 const createInvoiceFromQuote = async (quote, dueDate) => {
@@ -73,10 +104,28 @@ const sendQuoteEmail = async (quote) => {
   const apiBaseUrl = getApiBaseUrl();
   const acceptUrl = `${apiBaseUrl}/api/public/quotes/${populatedQuote.actionToken}/accept`;
   const declineUrl = `${apiBaseUrl}/api/public/quotes/${populatedQuote.actionToken}/decline`;
+  const serviceRows = formatServiceRows(populatedQuote.items);
+  const quotePdfBuffer = await generateReceiptPdf({
+    receipt: {
+      receiptNumber: populatedQuote.quoteNumber,
+      amount: 0,
+      paymentDate: populatedQuote.createdAt || new Date(),
+      method: "pending",
+    },
+    invoice: {
+      invoiceNumber: populatedQuote.quoteNumber,
+      items: populatedQuote.items,
+      total: populatedQuote.total,
+      amountPaid: 0,
+      balanceDue: populatedQuote.total,
+      status: "sent",
+    },
+    customer,
+  });
 
   return sendEmail({
     to: customer.email,
-    subject: `Quote ${populatedQuote.quoteNumber} from DIFMS`,
+    subject: `Quote ${populatedQuote.quoteNumber} from Brent labs`,
     html: `
       <div style="font-family: Arial, sans-serif; line-height: 1.5;">
         <h2>Quote ${populatedQuote.quoteNumber}</h2>
@@ -86,7 +135,18 @@ const sendQuoteEmail = async (quote) => {
           <tr><td><strong>Customer</strong></td><td>${customer.name}</td></tr>
           <tr><td><strong>Email</strong></td><td>${customer.email}</td></tr>
           <tr><td><strong>Amount</strong></td><td>${formatCurrency(populatedQuote.total)}</td></tr>
-          <tr><td><strong>Status</strong></td><td>${populatedQuote.status}</td></tr>
+          <tr><td><strong>Status</strong></td><td>Pending</td></tr>
+        </table>
+        <h3>Service Details</h3>
+        <table cellpadding="8" cellspacing="0" border="1" style="border-collapse: collapse;">
+          <thead>
+            <tr>
+              <th align="left">Service</th>
+              <th align="left">Qty</th>
+              <th align="left">Amount</th>
+            </tr>
+          </thead>
+          <tbody>${serviceRows}</tbody>
         </table>
         <p>
           <a href="${acceptUrl}" style="display:inline-block;padding:12px 18px;background:#16a34a;color:#fff;text-decoration:none;border-radius:6px;">Accept Quote</a>
@@ -94,6 +154,13 @@ const sendQuoteEmail = async (quote) => {
         </p>
       </div>
     `,
+    attachments: [
+      {
+        filename: `${populatedQuote.quoteNumber}.pdf`,
+        content: quotePdfBuffer,
+        contentType: "application/pdf",
+      },
+    ],
   });
 };
 
@@ -115,6 +182,9 @@ const sendPaymentEmail = async (invoice) => {
 
   const apiBaseUrl = getApiBaseUrl();
   const payUrl = `${apiBaseUrl}/api/public/invoices/${populatedInvoice.paymentToken}/pay`;
+  const serviceRows = formatServiceRows(populatedInvoice.items);
+  const status = formatStatus(populatedInvoice);
+
   return sendEmail({
     to: customer.email,
     subject: `Payment request for invoice ${populatedInvoice.invoiceNumber}`,
@@ -126,7 +196,18 @@ const sendPaymentEmail = async (invoice) => {
         <table cellpadding="8" cellspacing="0" border="1" style="border-collapse: collapse;">
           <tr><td><strong>Invoice</strong></td><td>${populatedInvoice.invoiceNumber}</td></tr>
           <tr><td><strong>Amount Due</strong></td><td>${formatCurrency(populatedInvoice.balanceDue)}</td></tr>
-          <tr><td><strong>Status</strong></td><td>${populatedInvoice.status}</td></tr>
+          <tr><td><strong>Status</strong></td><td>${status}</td></tr>
+        </table>
+        <h3>Service Details</h3>
+        <table cellpadding="8" cellspacing="0" border="1" style="border-collapse: collapse;">
+          <thead>
+            <tr>
+              <th align="left">Service</th>
+              <th align="left">Qty</th>
+              <th align="left">Amount</th>
+            </tr>
+          </thead>
+          <tbody>${serviceRows}</tbody>
         </table>
         <p>
           <a href="${payUrl}" style="display:inline-block;padding:12px 18px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;">Pay Now</a>

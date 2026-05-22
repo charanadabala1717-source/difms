@@ -17,12 +17,32 @@ const formatDate = (date) => {
   }).format(new Date(date));
 };
 
-const companyName = () => process.env.COMPANY_NAME || "DIFMS";
+const companyName = () => process.env.COMPANY_NAME || "Brent labs";
 const companyAddress = () =>
   process.env.COMPANY_ADDRESS ||
-  "DIFMS Accounts Department, London, United Kingdom";
+  "Brent labs Accounts Department, London, United Kingdom";
 const companyEmail = () => process.env.COMPANY_EMAIL || process.env.MAIL_FROM || "";
 const defaultLogoPath = () => path.join(__dirname, "..", "assets", "intern.jpg");
+
+const formatStatus = (invoice) => {
+  const total = Number(invoice.total) || 0;
+  const amountPaid = Number(invoice.amountPaid) || 0;
+  const balanceDue = Number(invoice.balanceDue ?? total - amountPaid) || 0;
+
+  if (invoice.status === "paid" || balanceDue <= 0 || amountPaid >= total) {
+    return "Paid";
+  }
+
+  if (invoice.status === "overdue") {
+    return "Overdue";
+  }
+
+  if (amountPaid > 0) {
+    return "Partially Paid";
+  }
+
+  return "Pending";
+};
 
 const addRow = (doc, label, value, y) => {
   doc.font("Helvetica-Bold").fontSize(10).fillColor("#334155").text(label, 50, y);
@@ -65,7 +85,7 @@ const generateReceiptPdf = ({ receipt, invoice, customer, logoPath = defaultLogo
 
     const startY = 220;
     addRow(doc, "Receipt Number", receipt.receiptNumber, startY);
-    addRow(doc, "Invoice Number", invoice.invoiceNumber, startY + 28);
+    addRow(doc, "Status", formatStatus(invoice), startY + 28);
     addRow(doc, "Customer Name", customer.name, startY + 56);
     addRow(doc, "Customer Email", customer.email, startY + 84);
     addRow(doc, "Payment Date", formatDate(receipt.paymentDate), startY + 112);
