@@ -5,6 +5,22 @@ const Quote = require("../models/Quote");
 const Receipt = require("../models/Receipt");
 const { createNumber, createToken, sendQuoteEmail } = require("../utils/flowHelpers");
 
+const normalizeServices = (services = []) => {
+  return services
+    .map((item) => {
+      const quantity = Math.max(Number(item.quantity) || 1, 1);
+      const price = Math.max(Number(item.price) || 0, 0);
+
+      return {
+        name: String(item.name || "").trim(),
+        quantity,
+        price,
+        total: quantity * price,
+      };
+    })
+    .filter((item) => item.name && item.total > 0);
+};
+
 const createCustomer = async (req, res) => {
   try {
     const {
@@ -15,6 +31,7 @@ const createCustomer = async (req, res) => {
       phoneNumber,
       totalAmount,
       service,
+      services,
       status,
       address,
       companyName,
@@ -24,6 +41,10 @@ const createCustomer = async (req, res) => {
       return res.status(400).json({ message: "Customer name is required" });
     }
 
+    const serviceItems = normalizeServices(services);
+    const calculatedTotal = serviceItems.reduce((sum, item) => sum + item.total, 0);
+    const serviceSummary = serviceItems.map((item) => item.name).join(", ") || service;
+
     const customer = await Customer.create({
       user: req.user._id,
       name,
@@ -31,8 +52,9 @@ const createCustomer = async (req, res) => {
       phone: phone || phoneNumber,
       countryCode,
       phoneNumber,
-      totalAmount: Number(totalAmount) || 0,
-      service,
+      totalAmount: calculatedTotal || Number(totalAmount) || 0,
+      service: serviceSummary,
+      services: serviceItems,
       status,
       address,
       companyName,
@@ -76,9 +98,19 @@ const getCustomerById = async (req, res) => {
 
 const updateCustomer = async (req, res) => {
   try {
+    const updates = { ...req.body };
+
+    if (Array.isArray(req.body.services)) {
+      const serviceItems = normalizeServices(req.body.services);
+      updates.services = serviceItems;
+      updates.service = serviceItems.map((item) => item.name).join(", ") || req.body.service;
+      updates.totalAmount =
+        serviceItems.reduce((sum, item) => sum + item.total, 0) || Number(req.body.totalAmount) || 0;
+    }
+
     const customer = await Customer.findOneAndUpdate(
       { _id: req.params.id, user: req.user._id, isDeleted: { $ne: true } },
-      req.body,
+      updates,
       { new: true, runValidators: true }
     );
 
@@ -149,20 +181,31 @@ const sendCustomerQuoteEmail = async (req, res) => {
       return res.status(400).json({ message: "Customer total amount must be greater than 0" });
     }
 
-    const amount = Number(customer.totalAmount);
+    const customerServices = Array.isArray(customer.services) ? customer.services : [];
+    const quoteItems =
+      customerServices.length > 0
+        ? customerServices.map((item) => ({
+            name: item.name,
+            description: `Quote for ${customer.name}`,
+            quantity: item.quantity,
+            price: item.price,
+            total: item.total,
+          }))
+        : [
+            {
+              name: customer.service || "Service",
+              description: `Quote for ${customer.name}`,
+              quantity: 1,
+              price: Number(customer.totalAmount),
+              total: Number(customer.totalAmount),
+            },
+          ];
+    const amount = quoteItems.reduce((sum, item) => sum + item.total, 0);
     const quote = await Quote.create({
       user: req.user._id,
       customer: customer._id,
       quoteNumber: createNumber("QTE"),
-      items: [
-        {
-          name: customer.service || "Service",
-          description: `Quote for ${customer.name}`,
-          quantity: 1,
-          price: amount,
-          total: amount,
-        },
-      ],
+      items: quoteItems,
       subtotal: amount,
       tax: 0,
       discount: 0,

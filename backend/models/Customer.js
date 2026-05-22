@@ -1,5 +1,31 @@
 const mongoose = require("mongoose");
 
+const serviceItemSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    quantity: {
+      type: Number,
+      default: 1,
+      min: 1,
+    },
+    price: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    total: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+  },
+  { _id: false }
+);
+
 const customerSchema = new mongoose.Schema(
   {
     user: {
@@ -37,6 +63,10 @@ const customerSchema = new mongoose.Schema(
     service: {
       type: String,
       trim: true,
+    },
+    services: {
+      type: [serviceItemSchema],
+      default: [],
     },
     status: {
       type: String,
