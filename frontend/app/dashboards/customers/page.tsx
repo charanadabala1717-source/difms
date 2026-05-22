@@ -6,12 +6,19 @@ import { apiRequest } from "../../difm/lib/api";
 
 type CustomerStatus = "Paid" | "Unpaid" | "Pending";
 
+type ServiceLineItem = {
+  name: string;
+  quantity: string;
+  price: string;
+};
+
 type CustomerRow = {
   id: string;
   customerId: string;
   name: string;
   email: string;
   service: string;
+  services: ServiceLineItem[];
   countryCode: string;
   phoneNumber: string;
   totalAmount: string;
@@ -23,6 +30,12 @@ type CustomerResponse = {
   name: string;
   email?: string;
   service?: string;
+  services?: Array<{
+    name?: string;
+    quantity?: number;
+    price?: number;
+    total?: number;
+  }>;
   countryCode?: string;
   phone?: string;
   phoneNumber?: string;
@@ -282,6 +295,7 @@ const emptyForm = {
   name: "",
   email: "",
   service: "",
+  services: [{ name: "", quantity: "1", price: "" }] as ServiceLineItem[],
   countryCode: "+44",
   phoneNumber: "",
   totalAmount: "",
@@ -307,6 +321,12 @@ export default function CustomersPage() {
     name: customer.name,
     email: customer.email || "",
     service: customer.service || "",
+    services:
+      customer.services?.map((item) => ({
+        name: item.name || "",
+        quantity: String(item.quantity || 1),
+        price: String(item.price || item.total || ""),
+      })) || [],
     countryCode: customer.countryCode || "+44",
     phoneNumber: customer.phoneNumber || customer.phone || "",
     totalAmount: String(customer.totalAmount || 0),
@@ -375,6 +395,10 @@ export default function CustomersPage() {
       name: customer.name,
       email: customer.email,
       service: customer.service,
+      services:
+        customer.services.length > 0
+          ? customer.services
+          : [{ name: customer.service, quantity: "1", price: customer.totalAmount }],
       countryCode: customer.countryCode,
       phoneNumber: customer.phoneNumber,
       totalAmount: customer.totalAmount,
@@ -413,6 +437,75 @@ export default function CustomersPage() {
     }
   };
 
+  const serviceTotal = useMemo(() => {
+    return formData.services.reduce((sum, item) => {
+      const quantity = Number(item.quantity) || 0;
+      const price = Number(item.price) || 0;
+
+      return sum + quantity * price;
+    }, 0);
+  }, [formData.services]);
+
+  const handleServiceChange = (
+    index: number,
+    field: keyof ServiceLineItem,
+    value: string
+  ) => {
+    setFormData((prev) => {
+      const services = prev.services.map((item, itemIndex) => {
+        if (itemIndex !== index) return item;
+
+        return {
+          ...item,
+          [field]: field === "name" ? value : value.replace(/[^\d.]/g, ""),
+        };
+      });
+
+      const totalAmount = services
+        .reduce(
+          (sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.price) || 0),
+          0
+        )
+        .toString();
+
+      return {
+        ...prev,
+        services,
+        service: services.map((item) => item.name.trim()).filter(Boolean).join(", "),
+        totalAmount,
+      };
+    });
+  };
+
+  const addServiceLine = () => {
+    setFormData((prev) => ({
+      ...prev,
+      services: [...prev.services, { name: "", quantity: "1", price: "" }],
+    }));
+  };
+
+  const removeServiceLine = (index: number) => {
+    setFormData((prev) => {
+      const services =
+        prev.services.length > 1
+          ? prev.services.filter((_, itemIndex) => itemIndex !== index)
+          : [{ name: "", quantity: "1", price: "" }];
+      const totalAmount = services
+        .reduce(
+          (sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.price) || 0),
+          0
+        )
+        .toString();
+
+      return {
+        ...prev,
+        services,
+        service: services.map((item) => item.name.trim()).filter(Boolean).join(", "),
+        totalAmount,
+      };
+    });
+  };
+
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
@@ -444,13 +537,16 @@ export default function CustomersPage() {
 
   const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    const validServices = formData.services.filter(
+      (item) => item.name.trim() && Number(item.quantity) > 0 && Number(item.price) > 0
+    );
+    const serviceSummary = validServices.map((item) => item.name.trim()).join(", ");
 
     if (
       !formData.name.trim() ||
       !formData.email.trim() ||
-      !formData.service.trim() ||
       !formData.phoneNumber.trim() ||
-      !formData.totalAmount.trim()
+      validServices.length === 0
     ) {
       return;
     }
@@ -461,11 +557,17 @@ export default function CustomersPage() {
       const payload = {
         name: formData.name,
         email: formData.email,
-        service: formData.service,
+        service: serviceSummary,
+        services: validServices.map((item) => ({
+          name: item.name.trim(),
+          quantity: Number(item.quantity),
+          price: Number(item.price),
+          total: Number(item.quantity) * Number(item.price),
+        })),
         countryCode: formData.countryCode,
         phoneNumber: formData.phoneNumber,
         phone: formData.phoneNumber,
-        totalAmount: Number(formData.totalAmount),
+        totalAmount: serviceTotal,
         status: formData.status,
       };
 
@@ -754,19 +856,91 @@ export default function CustomersPage() {
                 />
               </div>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-300">
-                  Service
-                </label>
-                <input
-                  type="text"
-                  name="service"
-                  value={formData.service}
-                  onChange={handleChange}
-                  placeholder="Enter service details"
-                  className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-blue-500"
-                  required
-                />
+              <div className="rounded-2xl border border-slate-700 bg-slate-800/60 p-4">
+                <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-300">
+                  Services
+                </h3>
+
+                <div className="hidden grid-cols-12 gap-2 px-1 text-xs font-semibold uppercase tracking-wide text-slate-400 sm:grid">
+                  <span className="col-span-6">Service</span>
+                  <span className="col-span-2">Qty</span>
+                  <span className="col-span-3">Unit Price</span>
+                  <span />
+                </div>
+
+                <div className="mt-2 space-y-3">
+                  {formData.services.map((item, index) => (
+                    <div
+                      key={index}
+                      className="grid grid-cols-1 gap-2 sm:grid-cols-12 sm:items-center"
+                    >
+                      <input
+                        type="text"
+                        value={item.name}
+                        onChange={(event) =>
+                          handleServiceChange(index, "name", event.target.value)
+                        }
+                        placeholder="Service name"
+                        className="min-w-0 rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-blue-500 sm:col-span-6"
+                        required
+                      />
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={item.quantity}
+                        onChange={(event) =>
+                          handleServiceChange(index, "quantity", event.target.value)
+                        }
+                        aria-label="Quantity"
+                        className="min-w-0 rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm text-white outline-none transition focus:border-blue-500 sm:col-span-2"
+                        required
+                      />
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={item.price}
+                        onChange={(event) =>
+                          handleServiceChange(index, "price", event.target.value)
+                        }
+                        placeholder="0.00"
+                        aria-label="Unit price"
+                        className="min-w-0 rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-blue-500 sm:col-span-3"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeServiceLine(index)}
+                        className="cursor-pointer justify-self-end rounded-lg p-2 text-slate-400 transition hover:bg-slate-700 hover:text-red-300 sm:col-span-1 sm:justify-self-center"
+                        aria-label="Remove service"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={addServiceLine}
+                  className="mt-4 w-full cursor-pointer rounded-xl border border-dashed border-slate-500 py-3 text-sm font-semibold text-slate-200 transition hover:border-blue-400 hover:text-blue-300"
+                >
+                  + Add service
+                </button>
+
+                <div className="mt-5 border-t border-slate-700 pt-4">
+                  <div className="flex items-center justify-between text-sm text-slate-300">
+                    <span>Subtotal</span>
+                    <span>£{serviceTotal.toFixed(2)}</span>
+                  </div>
+                  <div className="mt-4 border-t border-slate-500 pt-4">
+                    <div className="flex items-center justify-between text-lg font-bold text-white">
+                      <span>Total</span>
+                      <span>£{serviceTotal.toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div>
@@ -846,26 +1020,6 @@ export default function CustomersPage() {
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-300">
-                  Total Amount
-                </label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-slate-400">
-                    £
-                  </span>
-                  <input
-                    type="text"
-                    name="totalAmount"
-                    value={formData.totalAmount}
-                    onChange={handleChange}
-                    placeholder="Enter total amount"
-                    className="w-full rounded-xl border border-slate-700 bg-slate-800 py-3 pl-8 pr-4 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-blue-500"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-300">
                   Status
                 </label>
                 <select
@@ -903,3 +1057,4 @@ export default function CustomersPage() {
     </div>
   );
 }
+
