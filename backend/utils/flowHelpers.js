@@ -3,7 +3,7 @@ const Invoice = require("../models/Invoice");
 const Quote = require("../models/Quote");
 const { sendEmail } = require("./emailService");
 const { syncCustomerStatusFromInvoice } = require("./customerStatus");
-const { generateReceiptPdf } = require("./receiptPdf");
+const { generateInvoicePdf } = require("./receiptPdf");
 
 const createNumber = (prefix) => {
   return `${prefix}-${Date.now()}`;
@@ -105,22 +105,23 @@ const sendQuoteEmail = async (quote) => {
   const acceptUrl = `${apiBaseUrl}/api/public/quotes/${populatedQuote.actionToken}/accept`;
   const declineUrl = `${apiBaseUrl}/api/public/quotes/${populatedQuote.actionToken}/decline`;
   const serviceRows = formatServiceRows(populatedQuote.items);
-  const quotePdfBuffer = await generateReceiptPdf({
-    receipt: {
-      receiptNumber: populatedQuote.quoteNumber,
-      amount: 0,
-      paymentDate: populatedQuote.createdAt || new Date(),
-      method: "pending",
-    },
+  const quotePdfBuffer = await generateInvoicePdf({
     invoice: {
       invoiceNumber: populatedQuote.quoteNumber,
       items: populatedQuote.items,
+      subtotal: populatedQuote.subtotal,
       total: populatedQuote.total,
       amountPaid: 0,
       balanceDue: populatedQuote.total,
       status: "sent",
+      createdAt: populatedQuote.createdAt,
+      dueDate: populatedQuote.validUntil,
     },
     customer,
+    documentTitle: "Quote",
+    documentSubtitle: "Official Quote",
+    numberLabel: "Quote Number",
+    numberValue: populatedQuote.quoteNumber,
   });
 
   return sendEmail({
@@ -137,7 +138,7 @@ const sendQuoteEmail = async (quote) => {
           <tr><td><strong>Amount</strong></td><td>${formatCurrency(populatedQuote.total)}</td></tr>
           <tr><td><strong>Status</strong></td><td>Pending</td></tr>
         </table>
-        <h3>Service Details</h3>
+        <h3>Services</h3>
         <table cellpadding="8" cellspacing="0" border="1" style="border-collapse: collapse;">
           <thead>
             <tr>
@@ -184,6 +185,10 @@ const sendPaymentEmail = async (invoice) => {
   const payUrl = `${apiBaseUrl}/api/public/invoices/${populatedInvoice.paymentToken}/pay`;
   const serviceRows = formatServiceRows(populatedInvoice.items);
   const status = formatStatus(populatedInvoice);
+  const invoicePdfBuffer = await generateInvoicePdf({
+    invoice: populatedInvoice,
+    customer,
+  });
 
   return sendEmail({
     to: customer.email,
@@ -198,7 +203,7 @@ const sendPaymentEmail = async (invoice) => {
           <tr><td><strong>Amount Due</strong></td><td>${formatCurrency(populatedInvoice.balanceDue)}</td></tr>
           <tr><td><strong>Status</strong></td><td>${status}</td></tr>
         </table>
-        <h3>Service Details</h3>
+        <h3>Services</h3>
         <table cellpadding="8" cellspacing="0" border="1" style="border-collapse: collapse;">
           <thead>
             <tr>
@@ -214,6 +219,13 @@ const sendPaymentEmail = async (invoice) => {
         </p>
       </div>
     `,
+    attachments: [
+      {
+        filename: `${populatedInvoice.invoiceNumber}.pdf`,
+        content: invoicePdfBuffer,
+        contentType: "application/pdf",
+      },
+    ],
   });
 };
 

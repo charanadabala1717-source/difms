@@ -49,6 +49,119 @@ const addRow = (doc, label, value, y) => {
   doc.font("Helvetica").fontSize(10).fillColor("#0f172a").text(value || "-", 210, y);
 };
 
+const drawHeader = (doc, subtitle, logoPath) => {
+  doc.rect(0, 0, 595, 120).fill("#0f172a");
+  if (logoPath && fs.existsSync(logoPath)) {
+    doc.save();
+    doc.roundedRect(50, 35, 54, 54, 8).clip();
+    doc.image(logoPath, 50, 35, { width: 54, height: 54 });
+    doc.restore();
+  } else {
+    doc
+      .roundedRect(50, 35, 54, 54, 8)
+      .fill("#2563eb")
+      .fillColor("#ffffff")
+      .font("Helvetica-Bold")
+      .fontSize(18)
+      .text(companyName().slice(0, 2).toUpperCase(), 64, 52);
+  }
+  doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(24).text(companyName(), 120, 38);
+  doc.font("Helvetica").fontSize(11).fillColor("#cbd5e1").text(subtitle, 120, 68);
+};
+
+const drawItemsTable = (doc, items = [], startY) => {
+  doc.font("Helvetica-Bold").fontSize(10).fillColor("#334155");
+  doc.text("Service", 50, startY);
+  doc.text("Qty", 310, startY);
+  doc.text("Price", 370, startY);
+  doc.text("Total", 465, startY);
+  doc.moveTo(50, startY + 18).lineTo(545, startY + 18).stroke("#cbd5e1");
+
+  let y = startY + 35;
+  items.forEach((item) => {
+    doc.font("Helvetica").fontSize(10).fillColor("#0f172a");
+    doc.text(item.name || "Service", 50, y, {
+      width: 240,
+    });
+    doc.text(String(item.quantity || 1), 310, y);
+    doc.text(formatCurrency(item.price), 370, y);
+    doc.text(formatCurrency(item.total), 465, y);
+    y += 24;
+  });
+};
+
+const drawFooter = (doc, message) => {
+  doc.moveTo(50, 745).lineTo(545, 745).stroke("#cbd5e1");
+  doc
+    .font("Helvetica")
+    .fontSize(9)
+    .fillColor("#64748b")
+    .text(companyAddress(), 50, 760, { width: 330 })
+    .text(companyEmail(), 50, 774, { width: 330 });
+  doc.font("Helvetica-Bold").fillColor("#0f172a").text(message, 380, 760, {
+    width: 165,
+    align: "right",
+  });
+};
+
+const generateInvoicePdf = ({
+  invoice,
+  customer,
+  logoPath = defaultLogoPath(),
+  documentTitle = "Invoice",
+  documentSubtitle = "Official Invoice",
+  numberLabel = "Invoice Number",
+  numberValue,
+}) => {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: "A4", margin: 50 });
+    const chunks = [];
+    const documentNumber = numberValue || invoice.invoiceNumber;
+
+    doc.on("data", (chunk) => chunks.push(chunk));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+
+    drawHeader(doc, documentSubtitle, logoPath);
+
+    doc.fillColor("#0f172a").font("Helvetica-Bold").fontSize(20).text(documentTitle, 50, 150);
+    doc
+      .font("Helvetica")
+      .fontSize(10)
+      .fillColor("#64748b")
+      .text("Amount requested for the services listed below.", 50, 178);
+
+    const startY = 220;
+    addRow(doc, numberLabel, documentNumber, startY);
+    addRow(doc, "Status", formatStatus(invoice), startY + 28);
+    addRow(doc, "Customer Name", customer.name, startY + 56);
+    addRow(doc, "Customer Email", customer.email, startY + 84);
+    addRow(doc, "Issue Date", formatDate(invoice.createdAt || new Date()), startY + 112);
+    addRow(doc, "Due Date", invoice.dueDate ? formatDate(invoice.dueDate) : "On receipt", startY + 140);
+
+    doc.roundedRect(50, 400, 495, 90, 8).fill("#f8fafc").stroke("#e2e8f0");
+    doc.fillColor("#334155").font("Helvetica-Bold").fontSize(11).text("Amount Due", 75, 428);
+    doc
+      .fillColor("#2563eb")
+      .font("Helvetica-Bold")
+      .fontSize(28)
+      .text(formatCurrency(invoice.balanceDue ?? invoice.total), 75, 450);
+    doc
+      .fillColor("#64748b")
+      .font("Helvetica")
+      .fontSize(10)
+      .text(`Subtotal: ${formatCurrency(invoice.subtotal ?? invoice.total)}`, 320, 430)
+      .text(`Paid: ${formatCurrency(invoice.amountPaid)}`, 320, 452)
+      .text(`Total: ${formatCurrency(invoice.total)}`, 320, 474);
+
+    doc.fillColor("#0f172a").font("Helvetica-Bold").fontSize(12).text("Services", 50, 525);
+    drawItemsTable(doc, invoice.items, 555);
+    drawFooter(doc, "Thank you for your business.");
+
+    doc.end();
+  });
+};
+
 const generateReceiptPdf = ({ receipt, invoice, customer, logoPath = defaultLogoPath() }) => {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", margin: 50 });
@@ -58,23 +171,7 @@ const generateReceiptPdf = ({ receipt, invoice, customer, logoPath = defaultLogo
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
 
-    doc.rect(0, 0, 595, 120).fill("#0f172a");
-    if (logoPath && fs.existsSync(logoPath)) {
-      doc.save();
-      doc.roundedRect(50, 35, 54, 54, 8).clip();
-      doc.image(logoPath, 50, 35, { width: 54, height: 54 });
-      doc.restore();
-    } else {
-      doc
-        .roundedRect(50, 35, 54, 54, 8)
-        .fill("#2563eb")
-        .fillColor("#ffffff")
-        .font("Helvetica-Bold")
-        .fontSize(18)
-        .text(companyName().slice(0, 2).toUpperCase(), 64, 52);
-    }
-    doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(24).text(companyName(), 120, 38);
-    doc.font("Helvetica").fontSize(11).fillColor("#cbd5e1").text("Official Payment Receipt", 120, 68);
+    drawHeader(doc, "Official Payment Receipt", logoPath);
 
     doc.fillColor("#0f172a").font("Helvetica-Bold").fontSize(20).text("Receipt", 50, 150);
     doc
@@ -102,43 +199,13 @@ const generateReceiptPdf = ({ receipt, invoice, customer, logoPath = defaultLogo
       .text(`Amount paid: ${formatCurrency(invoice.amountPaid)}`, 320, 452)
       .text(`Balance due: ${formatCurrency(invoice.balanceDue)}`, 320, 474);
 
-    doc.fillColor("#0f172a").font("Helvetica-Bold").fontSize(12).text("Payment Details", 50, 525);
+    doc.fillColor("#0f172a").font("Helvetica-Bold").fontSize(12).text("Services", 50, 525);
 
-    const itemY = 555;
-    doc.font("Helvetica-Bold").fontSize(10).fillColor("#334155");
-    doc.text("Description", 50, itemY);
-    doc.text("Qty", 310, itemY);
-    doc.text("Price", 370, itemY);
-    doc.text("Total", 465, itemY);
-    doc.moveTo(50, itemY + 18).lineTo(545, itemY + 18).stroke("#cbd5e1");
-
-    let y = itemY + 35;
-    invoice.items.forEach((item) => {
-      doc.font("Helvetica").fontSize(10).fillColor("#0f172a");
-      doc.text(item.description ? `${item.name} - ${item.description}` : item.name, 50, y, { width: 240 });
-      doc.text(String(item.quantity), 310, y);
-      doc.text(formatCurrency(item.price), 370, y);
-      doc.text(formatCurrency(item.total), 465, y);
-      y += 24;
-    });
-
-    doc.moveTo(50, 745).lineTo(545, 745).stroke("#cbd5e1");
-    doc
-      .font("Helvetica")
-      .fontSize(9)
-      .fillColor("#64748b")
-      .text(companyAddress(), 50, 760, { width: 330 })
-      .text(companyEmail(), 50, 774, { width: 330 });
-    doc
-      .font("Helvetica-Bold")
-      .fillColor("#0f172a")
-      .text("Thank you for your payment.", 380, 760, {
-        width: 165,
-        align: "right",
-      });
+    drawItemsTable(doc, invoice.items, 555);
+    drawFooter(doc, "Thank you for your payment.");
 
     doc.end();
   });
 };
 
-module.exports = { formatCurrency, formatDate, generateReceiptPdf };
+module.exports = { formatCurrency, formatDate, generateInvoicePdf, generateReceiptPdf };

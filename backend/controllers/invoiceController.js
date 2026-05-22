@@ -6,7 +6,12 @@ const Payment = require("../models/Payment");
 const Receipt = require("../models/Receipt");
 const { sendEmail } = require("../utils/emailService");
 const { syncCustomerStatusFromInvoice } = require("../utils/customerStatus");
-const { formatCurrency, formatDate, generateReceiptPdf } = require("../utils/receiptPdf");
+const {
+  formatCurrency,
+  formatDate,
+  generateInvoicePdf,
+  generateReceiptPdf,
+} = require("../utils/receiptPdf");
 
 const getInvoiceStatus = (amountPaid, total, currentStatus = "sent") => {
   if (currentStatus === "cancelled") return "cancelled";
@@ -76,6 +81,14 @@ const getReceiptLogoPath = () => {
   }
 
   return path.join(__dirname, "..", "assets", "intern.jpg");
+};
+
+const isInvoicePaid = (invoice) => {
+  const total = Number(invoice.total) || 0;
+  const amountPaid = Number(invoice.amountPaid) || 0;
+  const balanceDue = Number(invoice.balanceDue ?? total - amountPaid) || 0;
+
+  return invoice.status === "paid" || balanceDue <= 0 || amountPaid >= total;
 };
 
 const getReceiptContext = async (invoiceId, userId) => {
@@ -339,7 +352,7 @@ const sendReceiptEmail = async (req, res) => {
         (item) => `
           <tr>
             <td style="padding:10px;border:1px solid #e2e8f0;">${item.name}</td>
-            <td style="padding:10px;border:1px solid #e2e8f0;">${item.description || "-"}</td>
+            <td style="padding:10px;border:1px solid #e2e8f0;text-align:center;">${item.quantity || 1}</td>
             <td style="padding:10px;border:1px solid #e2e8f0;text-align:right;">${formatCurrency(item.total)}</td>
           </tr>
         `
@@ -397,7 +410,7 @@ const sendReceiptEmail = async (req, res) => {
                 <thead>
                   <tr>
                     <th style="padding:10px;border:1px solid #e2e8f0;background:#f8fafc;text-align:left;">Service</th>
-                    <th style="padding:10px;border:1px solid #e2e8f0;background:#f8fafc;text-align:left;">Details</th>
+                    <th style="padding:10px;border:1px solid #e2e8f0;background:#f8fafc;text-align:center;">Qty</th>
                     <th style="padding:10px;border:1px solid #e2e8f0;background:#f8fafc;text-align:right;">Amount</th>
                   </tr>
                 </thead>
@@ -441,7 +454,7 @@ const sendReceiptEmail = async (req, res) => {
   }
 };
 
-const downloadReceiptPdf = async (req, res) => {
+const downloadInvoiceDocumentPdf = async (req, res) => {
   try {
     const invoice = await Invoice.findOne({
       _id: req.params.id,
@@ -457,16 +470,27 @@ const downloadReceiptPdf = async (req, res) => {
       return res.status(404).json({ message: "Customer not found for this invoice" });
     }
 
-    const receipt =
-      (await Receipt.findOne({
+    if (!isInvoicePaid(invoice)) {
+      const pdfBuffer = await generateInvoicePdf({
+        invoice,
+        customer: invoice.customer,
+        logoPath: getReceiptLogoPath(),
+      });
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${invoice.invoiceNumber}.pdf"`);
+      return res.send(pdfBuffer);
+    }
+
+    const receipt = (await Receipt.findOne({
         invoice: invoice._id,
         user: req.user._id,
         isDeleted: { $ne: true },
       }).sort({ createdAt: -1 })) || {
-        receiptNumber: invoice.invoiceNumber,
-        amount: invoice.amountPaid || 0,
+        receiptNumber: `RCT-${invoice.invoiceNumber}`,
+        amount: invoice.amountPaid || invoice.total,
         paymentDate: invoice.paidAt || invoice.updatedAt || invoice.createdAt || new Date(),
-        method: invoice.status === "paid" ? "recorded" : "pending",
+        method: "recorded",
       };
 
     const pdfBuffer = await generateReceiptPdf({
@@ -516,7 +540,7 @@ module.exports = {
   updateInvoice,
   sendInvoice,
   sendReceiptEmail,
-  downloadReceiptPdf,
+  downloadInvoiceDocumentPdf,
   deleteInvoice,
   getInvoiceStatus,
 };

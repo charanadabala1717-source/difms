@@ -186,7 +186,6 @@ const sendCustomerQuoteEmail = async (req, res) => {
       customerServices.length > 0
         ? customerServices.map((item) => ({
             name: item.name,
-            description: `Quote for ${customer.name}`,
             quantity: item.quantity,
             price: item.price,
             total: item.total,
@@ -194,7 +193,6 @@ const sendCustomerQuoteEmail = async (req, res) => {
         : [
             {
               name: customer.service || "Service",
-              description: `Quote for ${customer.name}`,
               quantity: 1,
               price: Number(customer.totalAmount),
               total: Number(customer.totalAmount),
