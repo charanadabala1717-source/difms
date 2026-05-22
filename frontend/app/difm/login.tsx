@@ -69,7 +69,7 @@ export default function Login() {
           <div className="mb-6 flex justify-center">
             <Image
               src="/images/intern.jpg"
-              alt="DIFMS Logo"
+              alt="Brent labs Logo"
               width={80}
               height={80}
               className="h-auto w-auto rounded-md object-contain"

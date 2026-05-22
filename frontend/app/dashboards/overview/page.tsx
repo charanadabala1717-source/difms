@@ -223,7 +223,7 @@ export default function OverviewPage() {
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-white sm:text-4xl">Overview</h1>
         <p className="mt-2 text-sm text-slate-300 sm:text-base">
-          {isLoading ? "Loading live dashboard data..." : "Welcome to the DIFMS dashboard overview."}
+          {isLoading ? "Loading live dashboard data..." : "Welcome to the Brent labs dashboard overview."}
         </p>
       </div>
 

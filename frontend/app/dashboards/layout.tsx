@@ -62,14 +62,14 @@ export default function DashboardLayout({
         <div className="flex items-center gap-3">
           <Image
             src="/images/intern.jpg"
-            alt="DIFMS Logo"
+            alt="Brent labs Logo"
             width={42}
             height={42}
             className="h-auto w-auto rounded-md object-contain"
             priority
           />
           <div>
-            <h1 className="text-sm font-bold text-slate-900">DIFMS</h1>
+            <h1 className="text-sm font-bold text-slate-900">Brent labs</h1>
             <p className="text-xs text-slate-500">{currentPageName}</p>
           </div>
         </div>
@@ -91,14 +91,14 @@ export default function DashboardLayout({
             <div className="flex items-center gap-4">
               <Image
                 src="/images/intern.jpg"
-                alt="DIFMS Logo"
+                alt="Brent labs Logo"
                 width={70}
                 height={70}
                 className="h-auto w-auto rounded-md object-contain"
                 priority
               />
               <div>
-                <h1 className="text-xl font-bold tracking-wide">DIFMS</h1>
+                <h1 className="text-xl font-bold tracking-wide">Brent labs</h1>
                 <p className="text-sm text-slate-300">Admin Panel</p>
               </div>
             </div>
@@ -149,14 +149,14 @@ export default function DashboardLayout({
                 <div className="flex items-center gap-3">
                   <Image
                     src="/images/intern.jpg"
-                    alt="DIFMS Logo"
+                    alt="Brent labs Logo"
                     width={52}
                     height={52}
                     className="h-auto w-auto rounded-md object-contain"
                     priority
                   />
                   <div>
-                    <h1 className="text-lg font-bold tracking-wide">DIFMS</h1>
+                    <h1 className="text-lg font-bold tracking-wide">Brent labs</h1>
                     <p className="text-xs text-slate-300">Admin Panel</p>
                   </div>
                 </div>
