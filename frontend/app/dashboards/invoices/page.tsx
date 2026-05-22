@@ -63,7 +63,7 @@ export default function InvoicesPage() {
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [sendingReceiptId, setSendingReceiptId] = useState<string | null>(null);
-  const [downloadingReceiptId, setDownloadingReceiptId] = useState<string | null>(null);
+  const [downloadingPdfId, setDownloadingPdfId] = useState<string | null>(null);
 
   const loadInvoices = useCallback(async () => {
     try {
@@ -169,22 +169,23 @@ export default function InvoicesPage() {
     try {
       setError("");
       setSuccessMessage("");
-      setDownloadingReceiptId(invoice.id);
+      setDownloadingPdfId(invoice.id);
 
-      const { blob, filename } = await apiBlobRequest(`/invoices/${invoice.id}/receipt-pdf`);
+      const { blob, filename } = await apiBlobRequest(`/invoices/${invoice.id}/document-pdf`);
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
 
       link.href = url;
-      link.download = filename || `${invoice.invoiceId}-receipt.pdf`;
+      link.download =
+        filename || `${invoice.invoiceId}-${invoice.status === "Paid" ? "receipt" : "invoice"}.pdf`;
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to download receipt PDF");
+      setError(err instanceof Error ? err.message : "Failed to download PDF");
     } finally {
-      setDownloadingReceiptId(null);
+      setDownloadingPdfId(null);
     }
   };
 
@@ -337,10 +338,10 @@ export default function InvoicesPage() {
 
                         <button
                           onClick={() => handleDownloadPdf(invoice)}
-                          disabled={downloadingReceiptId === invoice.id}
+                          disabled={downloadingPdfId === invoice.id}
                           className="cursor-pointer rounded-lg bg-emerald-500/10 p-2 text-emerald-400 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
                           aria-label={`Download PDF ${invoice.invoiceId}`}
-                          title="Download PDF"
+                          title={invoice.status === "Paid" ? "Download receipt PDF" : "Download invoice PDF"}
                         >
                           <FileDown size={16} />
                         </button>
