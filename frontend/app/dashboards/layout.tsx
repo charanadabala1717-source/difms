@@ -8,7 +8,8 @@ import {
   LayoutDashboard,
   Users,
   FileText,
-  Ticket,
+  FileSignature,
+  Settings,
   LogOut,
   Menu,
   X,
@@ -17,8 +18,9 @@ import {
 const navItems = [
   { name: "Overview", path: "/dashboards/overview", icon: LayoutDashboard },
   { name: "Customers", path: "/dashboards/customers", icon: Users },
+  { name: "Quotes", path: "/dashboards/quotes", icon: FileSignature },
   { name: "Invoices", path: "/dashboards/invoices", icon: FileText },
-  { name: "Tickets", path: "/dashboards/tickets", icon: Ticket },
+  { name: "Settings", path: "/dashboards/settings", icon: Settings },
 ];
 
 export default function DashboardLayout({

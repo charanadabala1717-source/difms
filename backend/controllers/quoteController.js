@@ -6,7 +6,9 @@ const {
   createNumber,
   createToken,
   sendPaymentEmail,
+  sendQuoteEmail,
 } = require("../utils/flowHelpers");
+const { normalizeCurrency } = require("../utils/currency");
 
 const calculateTotals = (items, tax = 0, discount = 0) => {
   const calculatedItems = items.map((item) => {
@@ -14,13 +16,12 @@ const calculateTotals = (items, tax = 0, discount = 0) => {
     const price = Number(item.price);
 
     return {
-      name: item.name,
-      description: item.description,
+      name: String(item.name || "").trim(),
       quantity,
       price,
       total: quantity * price,
     };
-  });
+  }).filter((item) => item.name && item.quantity > 0 && item.price >= 0);
 
   const subtotal = calculatedItems.reduce((sum, item) => sum + item.total, 0);
   const total = Math.max(subtotal + Number(tax) - Number(discount), 0);
@@ -36,7 +37,7 @@ const calculateTotals = (items, tax = 0, discount = 0) => {
 
 const createQuote = async (req, res) => {
   try {
-    const { customer, items, tax, discount, validUntil, notes, status } = req.body;
+    const { customer, items, tax, discount, validUntil, notes, status, currency } = req.body;
 
     if (!customer) {
       return res.status(400).json({ message: "Customer is required" });
@@ -57,12 +58,16 @@ const createQuote = async (req, res) => {
     }
 
     const totals = calculateTotals(items, tax, discount);
+    if (totals.items.length === 0) {
+      return res.status(400).json({ message: "At least one valid quote item is required" });
+    }
 
     const quote = await Quote.create({
       user: req.user._id,
       customer,
       quoteNumber: createNumber("QTE"),
       ...totals,
+      currency: normalizeCurrency(currency || req.user.currency),
       validUntil,
       notes,
       status: status || "draft",
@@ -123,7 +128,7 @@ const updateQuote = async (req, res) => {
       return res.status(400).json({ message: "Converted quotes cannot be edited" });
     }
 
-    const { customer, items, tax, discount, validUntil, notes, status } = req.body;
+    const { customer, items, tax, discount, validUntil, notes, status, currency } = req.body;
 
     if (customer) {
       const existingCustomer = await Customer.findOne({
@@ -141,6 +146,9 @@ const updateQuote = async (req, res) => {
 
     if (items) {
       const totals = calculateTotals(items, tax ?? quote.tax, discount ?? quote.discount);
+      if (totals.items.length === 0) {
+        return res.status(400).json({ message: "At least one valid quote item is required" });
+      }
       quote.items = totals.items;
       quote.subtotal = totals.subtotal;
       quote.tax = totals.tax;
@@ -155,11 +163,59 @@ const updateQuote = async (req, res) => {
     if (validUntil !== undefined) quote.validUntil = validUntil;
     if (notes !== undefined) quote.notes = notes;
     if (status) quote.status = status;
+    if (currency) quote.currency = normalizeCurrency(currency);
 
     const updatedQuote = await quote.save();
     const populatedQuote = await updatedQuote.populate("customer");
 
     res.json(populatedQuote);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const sendQuote = async (req, res) => {
+  try {
+    const quote = await Quote.findOne({
+      _id: req.params.id,
+      user: req.user._id,
+      isDeleted: { $ne: true },
+    }).populate("customer");
+
+    if (!quote || !quote.customer) {
+      return res.status(404).json({ message: "Quote not found" });
+    }
+
+    if (!quote.customer.email) {
+      return res.status(400).json({ message: "Customer email is required to send quote" });
+    }
+
+    if (quote.status === "converted") {
+      return res.status(400).json({ message: "Converted quotes cannot be sent" });
+    }
+
+    if (!quote.actionToken) {
+      quote.actionToken = createToken();
+      quote.actionTokenExpires = new Date(Date.now() + 1000 * 60 * 60 * 24 * 14);
+    }
+
+    const email = await sendQuoteEmail(quote);
+    if (!email.sent) {
+      return res.status(400).json({
+        message: `Quote email was not sent: ${email.reason || "Unknown email error"}`,
+        email,
+      });
+    }
+
+    quote.status = "sent";
+    await quote.save();
+    const populatedQuote = await quote.populate("customer");
+
+    res.json({
+      message: `Quote email sent to ${quote.customer.email}`,
+      quote: populatedQuote,
+      email,
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -237,5 +293,6 @@ module.exports = {
   getQuoteById,
   updateQuote,
   acceptQuote,
+  sendQuote,
   convertQuoteToInvoice,
 };

@@ -1,13 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const PDFDocument = require("pdfkit");
-
-const formatCurrency = (amount) => {
-  return new Intl.NumberFormat("en-GB", {
-    style: "currency",
-    currency: "GBP",
-  }).format(Number(amount) || 0);
-};
+const { formatCurrency: formatMoney } = require("./currency");
 
 const formatDate = (date) => {
   return new Intl.DateTimeFormat("en-GB", {
@@ -84,8 +78,8 @@ const drawItemsTable = (doc, items = [], startY) => {
       width: 240,
     });
     doc.text(String(item.quantity || 1), 310, y);
-    doc.text(formatCurrency(item.price), 370, y);
-    doc.text(formatCurrency(item.total), 465, y);
+    doc.text(formatMoney(item.price, doc.invoiceCurrency), 370, y);
+    doc.text(formatMoney(item.total, doc.invoiceCurrency), 465, y);
     y += 24;
   });
 };
@@ -123,6 +117,7 @@ const generateInvoicePdf = ({
     doc.on("error", reject);
 
     drawHeader(doc, documentSubtitle, logoPath);
+    doc.invoiceCurrency = invoice.currency;
 
     doc.fillColor("#0f172a").font("Helvetica-Bold").fontSize(20).text(documentTitle, 50, 150);
     doc
@@ -145,14 +140,14 @@ const generateInvoicePdf = ({
       .fillColor("#2563eb")
       .font("Helvetica-Bold")
       .fontSize(28)
-      .text(formatCurrency(invoice.balanceDue ?? invoice.total), 75, 450);
+      .text(formatMoney(invoice.balanceDue ?? invoice.total, invoice.currency), 75, 450);
     doc
       .fillColor("#64748b")
       .font("Helvetica")
       .fontSize(10)
-      .text(`Subtotal: ${formatCurrency(invoice.subtotal ?? invoice.total)}`, 320, 430)
-      .text(`Paid: ${formatCurrency(invoice.amountPaid)}`, 320, 452)
-      .text(`Total: ${formatCurrency(invoice.total)}`, 320, 474);
+      .text(`Subtotal: ${formatMoney(invoice.subtotal ?? invoice.total, invoice.currency)}`, 320, 430)
+      .text(`Paid: ${formatMoney(invoice.amountPaid, invoice.currency)}`, 320, 452)
+      .text(`Total: ${formatMoney(invoice.total, invoice.currency)}`, 320, 474);
 
     doc.fillColor("#0f172a").font("Helvetica-Bold").fontSize(12).text("Services", 50, 525);
     drawItemsTable(doc, invoice.items, 555);
@@ -172,6 +167,7 @@ const generateReceiptPdf = ({ receipt, invoice, customer, logoPath = defaultLogo
     doc.on("error", reject);
 
     drawHeader(doc, "Official Payment Receipt", logoPath);
+    doc.invoiceCurrency = invoice.currency;
 
     doc.fillColor("#0f172a").font("Helvetica-Bold").fontSize(20).text("Receipt", 50, 150);
     doc
@@ -190,14 +186,18 @@ const generateReceiptPdf = ({ receipt, invoice, customer, logoPath = defaultLogo
 
     doc.roundedRect(50, 400, 495, 90, 8).fill("#f8fafc").stroke("#e2e8f0");
     doc.fillColor("#334155").font("Helvetica-Bold").fontSize(11).text("Amount Paid", 75, 428);
-    doc.fillColor("#16a34a").font("Helvetica-Bold").fontSize(28).text(formatCurrency(receipt.amount), 75, 450);
+    doc
+      .fillColor("#16a34a")
+      .font("Helvetica-Bold")
+      .fontSize(28)
+      .text(formatMoney(receipt.amount, invoice.currency), 75, 450);
     doc
       .fillColor("#64748b")
       .font("Helvetica")
       .fontSize(10)
-      .text(`Invoice total: ${formatCurrency(invoice.total)}`, 320, 430)
-      .text(`Amount paid: ${formatCurrency(invoice.amountPaid)}`, 320, 452)
-      .text(`Balance due: ${formatCurrency(invoice.balanceDue)}`, 320, 474);
+      .text(`Invoice total: ${formatMoney(invoice.total, invoice.currency)}`, 320, 430)
+      .text(`Amount paid: ${formatMoney(invoice.amountPaid, invoice.currency)}`, 320, 452)
+      .text(`Balance due: ${formatMoney(invoice.balanceDue, invoice.currency)}`, 320, 474);
 
     doc.fillColor("#0f172a").font("Helvetica-Bold").fontSize(12).text("Services", 50, 525);
 
@@ -208,4 +208,4 @@ const generateReceiptPdf = ({ receipt, invoice, customer, logoPath = defaultLogo
   });
 };
 
-module.exports = { formatCurrency, formatDate, generateInvoicePdf, generateReceiptPdf };
+module.exports = { formatCurrency: formatMoney, formatDate, generateInvoicePdf, generateReceiptPdf };

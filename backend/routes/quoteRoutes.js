@@ -5,6 +5,7 @@ const {
   getQuoteById,
   updateQuote,
   acceptQuote,
+  sendQuote,
   convertQuoteToInvoice,
 } = require("../controllers/quoteController");
 const { protect } = require("../middleware/authMiddleware");
@@ -14,6 +15,7 @@ const router = express.Router();
 router.use(protect);
 
 router.route("/").post(createQuote).get(getQuotes);
+router.post("/:id/send", sendQuote);
 router.post("/:id/accept", acceptQuote);
 router.post("/:id/convert-to-invoice", convertQuoteToInvoice);
 router.route("/:id").get(getQuoteById).put(updateQuote);

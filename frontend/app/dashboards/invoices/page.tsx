@@ -11,6 +11,7 @@ type InvoiceRow = {
   invoiceId: string;
   customerName: string;
   amount: string;
+  currency: "GBP" | "ZMW";
   status: InvoiceStatus;
 };
 
@@ -21,6 +22,7 @@ type InvoiceResponse = {
     name?: string;
   };
   total: number;
+  currency?: "GBP" | "ZMW";
   amountPaid?: number;
   balanceDue?: number;
   status: "draft" | "sent" | "partially_paid" | "paid" | "overdue" | "cancelled";
@@ -29,7 +31,17 @@ type InvoiceResponse = {
 const emptyForm = {
   customerName: "",
   amount: "",
+  currency: "GBP" as "GBP" | "ZMW",
   status: "Pending" as InvoiceStatus,
+};
+
+const formatCurrency = (amount: string | number, currency: "GBP" | "ZMW" = "GBP") => {
+  if (currency === "ZMW") return `K${Number(amount || 0).toFixed(2)}`;
+
+  return new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency: "GBP",
+  }).format(Number(amount) || 0);
 };
 
 const mapStatus = (invoice: InvoiceResponse): InvoiceStatus => {
@@ -50,6 +62,7 @@ const mapInvoice = (invoice: InvoiceResponse): InvoiceRow => ({
   invoiceId: invoice.invoiceNumber,
   customerName: invoice.customer?.name || "Unknown Customer",
   amount: String(invoice.total || 0),
+  currency: invoice.currency || "GBP",
   status: mapStatus(invoice),
 });
 
@@ -99,6 +112,7 @@ export default function InvoicesPage() {
     setFormData({
       customerName: invoice.customerName,
       amount: invoice.amount,
+      currency: invoice.currency,
       status: invoice.status,
     });
     setIsModalOpen(true);
@@ -143,6 +157,7 @@ export default function InvoicesPage() {
       const payload = {
         customerName: formData.customerName,
         amount: Number(formData.amount),
+        currency: formData.currency,
         status: formData.status,
       };
 
@@ -315,7 +330,7 @@ export default function InvoicesPage() {
                       {invoice.customerName}
                     </td>
                     <td className="px-4 py-4 text-sm font-semibold text-white">
-                      £{invoice.amount}
+                      {formatCurrency(invoice.amount, invoice.currency)}
                     </td>
                     <td className="px-4 py-4">
                       <span
@@ -428,27 +443,31 @@ export default function InvoicesPage() {
                   required
                 />
               </div>
-
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-300">
                   Amount
                 </label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-slate-400">
-                    £
-                  </span>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <select
+                    name="currency"
+                    value={formData.currency}
+                    onChange={handleChange}
+                    className="cursor-pointer rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-sm text-white outline-none transition focus:border-blue-500"
+                  >
+                    <option value="GBP">GBP (£)</option>
+                    <option value="ZMW">ZMW (K)</option>
+                  </select>
                   <input
                     type="text"
                     name="amount"
                     value={formData.amount}
                     onChange={handleChange}
                     placeholder="Enter amount"
-                    className="w-full rounded-xl border border-slate-700 bg-slate-800 py-3 pl-8 pr-4 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-blue-500"
+                    className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-blue-500 sm:col-span-2"
                     required
                   />
                 </div>
               </div>
-
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-300">
                   Status
@@ -488,3 +507,4 @@ export default function InvoicesPage() {
     </div>
   );
 }
+

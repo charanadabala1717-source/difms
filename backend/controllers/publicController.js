@@ -2,10 +2,8 @@ const Stripe = require("stripe");
 const Invoice = require("../models/Invoice");
 const Quote = require("../models/Quote");
 const {
-  createInvoiceFromQuote,
   formatCurrency,
   getClientBaseUrl,
-  sendPaymentEmail,
 } = require("../utils/flowHelpers");
 const { recordInvoicePayment } = require("../utils/paymentHelpers");
 
@@ -67,20 +65,10 @@ const acceptPublicQuote = async (req, res) => {
     quote.acceptedAt = new Date();
     await quote.save();
 
-    const invoice = await createInvoiceFromQuote(quote);
-    quote.status = "converted";
-    await quote.save();
-
-    const emailResult = await sendPaymentEmail(invoice);
-
     return res.send(
       renderMessage(
         "Quote accepted",
-        `Thank you. Your quote has been accepted for ${formatCurrency(invoice.total)}. ${
-          emailResult.sent
-            ? "A payment link has been sent to your email."
-            : "Payment email was prepared, but SMTP is not configured."
-        }`
+        `Thank you. Your quote has been accepted for ${formatCurrency(quote.total, quote.currency)}. The company will prepare your invoice next.`
       )
     );
   } catch (error) {
@@ -148,7 +136,7 @@ const openPayment = async (req, res) => {
           {
             quantity: 1,
             price_data: {
-              currency: "gbp",
+              currency: String(invoice.currency || "GBP").toLowerCase(),
               unit_amount: Math.round(invoice.balanceDue * 100),
               product_data: {
                 name: `Invoice ${invoice.invoiceNumber}`,
@@ -184,7 +172,7 @@ const openPayment = async (req, res) => {
           <div class="box">
             <h1>Invoice ${invoice.invoiceNumber}</h1>
             <p>Customer: ${invoice.customer.name}</p>
-            <p>Amount due: ${formatCurrency(invoice.balanceDue)}</p>
+            <p>Amount due: ${formatCurrency(invoice.balanceDue, invoice.currency)}</p>
             <p>Stripe is not configured yet, so this development page simulates a successful payment.</p>
             <form method="POST" action="/api/public/invoices/${invoice.paymentToken}/pay/manual">
               <button type="submit">Mark as Paid</button>

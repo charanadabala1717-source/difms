@@ -12,6 +12,7 @@ const {
   generateInvoicePdf,
   generateReceiptPdf,
 } = require("../utils/receiptPdf");
+const { normalizeCurrency } = require("../utils/currency");
 
 const getInvoiceStatus = (amountPaid, total, currentStatus = "sent") => {
   if (currentStatus === "cancelled") return "cancelled";
@@ -132,7 +133,7 @@ const mapUiStatusToInvoiceStatus = (status) => {
 
 const createInvoice = async (req, res) => {
   try {
-    const { customer, customerName, amount, status, dueDate } = req.body;
+    const { customer, customerName, amount, status, dueDate, currency } = req.body;
 
     if (!customer && !customerName) {
       return res.status(400).json({ message: "Customer or customer name is required" });
@@ -179,6 +180,7 @@ const createInvoice = async (req, res) => {
         },
       ],
       subtotal: total,
+      currency: normalizeCurrency(currency),
       tax: 0,
       discount: 0,
       total,
@@ -228,9 +230,10 @@ const updateInvoice = async (req, res) => {
       return res.status(404).json({ message: "Invoice not found" });
     }
 
-    const { customerName, amount, dueDate, status } = req.body;
+    const { customerName, amount, dueDate, status, currency } = req.body;
 
     if (dueDate !== undefined) invoice.dueDate = dueDate;
+    if (currency) invoice.currency = normalizeCurrency(currency);
     if (status !== undefined) {
       invoice.status = mapUiStatusToInvoiceStatus(status);
       invoice.amountPaid = invoice.status === "paid" ? invoice.total : 0;
@@ -353,7 +356,7 @@ const sendReceiptEmail = async (req, res) => {
           <tr>
             <td style="padding:10px;border:1px solid #e2e8f0;">${item.name}</td>
             <td style="padding:10px;border:1px solid #e2e8f0;text-align:center;">${item.quantity || 1}</td>
-            <td style="padding:10px;border:1px solid #e2e8f0;text-align:right;">${formatCurrency(item.total)}</td>
+            <td style="padding:10px;border:1px solid #e2e8f0;text-align:right;">${formatCurrency(item.total, invoice.currency)}</td>
           </tr>
         `
       )
@@ -398,7 +401,7 @@ const sendReceiptEmail = async (req, res) => {
                 </tr>
                 <tr>
                   <td style="padding:10px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:700;">Amount Paid</td>
-                  <td style="padding:10px;border:1px solid #e2e8f0;font-weight:700;color:#16a34a;">${formatCurrency(receipt.amount)}</td>
+                  <td style="padding:10px;border:1px solid #e2e8f0;font-weight:700;color:#16a34a;">${formatCurrency(receipt.amount, invoice.currency)}</td>
                 </tr>
                 <tr>
                   <td style="padding:10px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:700;">Payment Method</td>

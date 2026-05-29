@@ -1,6 +1,7 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+const { normalizeCurrency } = require("../utils/currency");
 
 const generateToken = (userId) => {
   return jwt.sign({ id: userId }, process.env.JWT_SECRET, {
@@ -40,6 +41,7 @@ const registerUser = async (req, res) => {
       name: user.name,
       email: user.email,
       role: user.role,
+      currency: user.currency,
       token: generateToken(user._id),
     });
   } catch (error) {
@@ -72,6 +74,7 @@ const loginUser = async (req, res) => {
       name: user.name,
       email: user.email,
       role: user.role,
+      currency: user.currency,
       token: generateToken(user._id),
     });
   } catch (error) {
@@ -83,4 +86,23 @@ const getMe = async (req, res) => {
   res.json(req.user);
 };
 
-module.exports = { registerUser, loginUser, getMe };
+const updateMe = async (req, res) => {
+  try {
+    if (req.body.currency) {
+      req.user.currency = normalizeCurrency(req.body.currency);
+    }
+
+    const user = await req.user.save();
+    res.json({
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      currency: user.currency,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+module.exports = { registerUser, loginUser, getMe, updateMe };

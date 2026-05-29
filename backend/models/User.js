@@ -23,6 +23,11 @@ const userSchema = new mongoose.Schema(
       enum: ["admin", "user"],
       default: "user",
     },
+    currency: {
+      type: String,
+      enum: ["GBP", "ZMW"],
+      default: "GBP",
+    },
   },
   { timestamps: true }
 );

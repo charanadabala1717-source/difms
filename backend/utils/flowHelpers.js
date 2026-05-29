@@ -3,6 +3,7 @@ const Invoice = require("../models/Invoice");
 const Quote = require("../models/Quote");
 const { sendEmail } = require("./emailService");
 const { syncCustomerStatusFromInvoice } = require("./customerStatus");
+const { formatCurrency, normalizeCurrency } = require("./currency");
 const { generateInvoicePdf } = require("./receiptPdf");
 
 const createNumber = (prefix) => {
@@ -21,13 +22,6 @@ const getClientBaseUrl = () => {
   return process.env.CLIENT_URL || "http://localhost:3000";
 };
 
-const formatCurrency = (amount) => {
-  return new Intl.NumberFormat("en-GB", {
-    style: "currency",
-    currency: "GBP",
-  }).format(Number(amount) || 0);
-};
-
 const formatStatus = (record) => {
   const total = Number(record.total) || 0;
   const amountPaid = Number(record.amountPaid) || 0;
@@ -44,14 +38,14 @@ const formatStatus = (record) => {
   return "Pending";
 };
 
-const formatServiceRows = (items = []) => {
+const formatServiceRows = (items = [], currency) => {
   return items
     .map(
       (item) => `
         <tr>
           <td>${item.name || "Service"}</td>
           <td>${item.quantity || 1}</td>
-          <td>${formatCurrency(item.total)}</td>
+          <td>${formatCurrency(item.total, currency)}</td>
         </tr>
       `
     )
@@ -76,6 +70,7 @@ const createInvoiceFromQuote = async (quote, dueDate) => {
     invoiceNumber: createNumber("INV"),
     items: quote.items,
     subtotal: quote.subtotal,
+    currency: normalizeCurrency(quote.currency),
     tax: quote.tax,
     discount: quote.discount,
     total: quote.total,
@@ -104,12 +99,14 @@ const sendQuoteEmail = async (quote) => {
   const apiBaseUrl = getApiBaseUrl();
   const acceptUrl = `${apiBaseUrl}/api/public/quotes/${populatedQuote.actionToken}/accept`;
   const declineUrl = `${apiBaseUrl}/api/public/quotes/${populatedQuote.actionToken}/decline`;
-  const serviceRows = formatServiceRows(populatedQuote.items);
+  const currency = normalizeCurrency(populatedQuote.currency);
+  const serviceRows = formatServiceRows(populatedQuote.items, currency);
   const quotePdfBuffer = await generateInvoicePdf({
     invoice: {
       invoiceNumber: populatedQuote.quoteNumber,
       items: populatedQuote.items,
       subtotal: populatedQuote.subtotal,
+      currency,
       total: populatedQuote.total,
       amountPaid: 0,
       balanceDue: populatedQuote.total,
@@ -135,7 +132,7 @@ const sendQuoteEmail = async (quote) => {
         <table cellpadding="8" cellspacing="0" border="1" style="border-collapse: collapse;">
           <tr><td><strong>Customer</strong></td><td>${customer.name}</td></tr>
           <tr><td><strong>Email</strong></td><td>${customer.email}</td></tr>
-          <tr><td><strong>Amount</strong></td><td>${formatCurrency(populatedQuote.total)}</td></tr>
+          <tr><td><strong>Amount</strong></td><td>${formatCurrency(populatedQuote.total, currency)}</td></tr>
           <tr><td><strong>Status</strong></td><td>Pending</td></tr>
         </table>
         <h3>Services</h3>
@@ -183,7 +180,8 @@ const sendPaymentEmail = async (invoice) => {
 
   const apiBaseUrl = getApiBaseUrl();
   const payUrl = `${apiBaseUrl}/api/public/invoices/${populatedInvoice.paymentToken}/pay`;
-  const serviceRows = formatServiceRows(populatedInvoice.items);
+  const currency = normalizeCurrency(populatedInvoice.currency);
+  const serviceRows = formatServiceRows(populatedInvoice.items, currency);
   const status = formatStatus(populatedInvoice);
   const invoicePdfBuffer = await generateInvoicePdf({
     invoice: populatedInvoice,
@@ -200,7 +198,7 @@ const sendPaymentEmail = async (invoice) => {
         <p>Your quote has been accepted and an invoice has been generated.</p>
         <table cellpadding="8" cellspacing="0" border="1" style="border-collapse: collapse;">
           <tr><td><strong>Invoice</strong></td><td>${populatedInvoice.invoiceNumber}</td></tr>
-          <tr><td><strong>Amount Due</strong></td><td>${formatCurrency(populatedInvoice.balanceDue)}</td></tr>
+          <tr><td><strong>Amount Due</strong></td><td>${formatCurrency(populatedInvoice.balanceDue, currency)}</td></tr>
           <tr><td><strong>Status</strong></td><td>${status}</td></tr>
         </table>
         <h3>Services</h3>

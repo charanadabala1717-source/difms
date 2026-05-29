@@ -37,6 +37,11 @@ const quoteSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+    currency: {
+      type: String,
+      enum: ["GBP", "ZMW"],
+      default: "GBP",
+    },
     tax: {
       type: Number,
       default: 0,

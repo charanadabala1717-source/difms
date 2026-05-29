@@ -25,15 +25,20 @@ const sendEmail = async ({ to, subject, html, attachments = [] }) => {
 
   const transporter = createTransporter();
 
-  await transporter.sendMail({
-    from: process.env.MAIL_FROM || process.env.SMTP_USER,
-    to,
-    subject,
-    html,
-    attachments,
-  });
+  try {
+    const info = await transporter.sendMail({
+      from: process.env.MAIL_FROM || process.env.SMTP_USER,
+      to,
+      subject,
+      html,
+      attachments,
+    });
 
-  return { sent: true };
+    return { sent: true, messageId: info.messageId };
+  } catch (error) {
+    console.error("Email sending failed:", error.message);
+    return { sent: false, reason: error.message };
+  }
 };
 
 module.exports = { sendEmail };

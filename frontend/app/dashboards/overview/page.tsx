@@ -46,6 +46,11 @@ type PaymentResponse = {
   createdAt?: string;
 };
 
+type QuoteResponse = {
+  _id: string;
+  status: "draft" | "sent" | "accepted" | "rejected" | "expired" | "converted";
+};
+
 const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "GBP",
@@ -105,6 +110,7 @@ export default function OverviewPage() {
   const [customers, setCustomers] = useState<CustomerResponse[]>([]);
   const [invoices, setInvoices] = useState<InvoiceResponse[]>([]);
   const [payments, setPayments] = useState<PaymentResponse[]>([]);
+  const [quotes, setQuotes] = useState<QuoteResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -114,15 +120,17 @@ export default function OverviewPage() {
         setIsLoading(true);
         setError("");
 
-        const [customerData, invoiceData, paymentData] = await Promise.all([
+        const [customerData, invoiceData, paymentData, quoteData] = await Promise.all([
           apiRequest<CustomerResponse[]>("/customers"),
           apiRequest<InvoiceResponse[]>("/invoices"),
           apiRequest<PaymentResponse[]>("/payments"),
+          apiRequest<QuoteResponse[]>("/quotes"),
         ]);
 
         setCustomers(customerData);
         setInvoices(invoiceData);
         setPayments(paymentData);
+        setQuotes(quoteData);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load overview data");
       } finally {
@@ -204,6 +212,7 @@ export default function OverviewPage() {
     return {
       totalCustomers: customers.length,
       totalInvoices: invoices.length,
+      openQuotes: quotes.filter((quote) => quote.status !== "converted").length,
       totalRevenue,
       weeklyRevenue,
       monthlyRevenue,
@@ -216,7 +225,7 @@ export default function OverviewPage() {
       revenueGrowthData,
       recentTransactions,
     };
-  }, [customers.length, invoices, payments]);
+  }, [customers.length, invoices, payments, quotes]);
 
   return (
     <div className="min-h-screen">
@@ -244,9 +253,9 @@ export default function OverviewPage() {
           value={String(overview.totalInvoices)}
         />
         <StatCard
-          title="Open Tickets"
-          value="0"
-          trend="Not connected yet"
+          title="Open Quotes"
+          value={String(overview.openQuotes)}
+          trend="Pending quote activity"
           trendColor="text-slate-400"
         />
       </div>
