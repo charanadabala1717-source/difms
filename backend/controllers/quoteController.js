@@ -272,7 +272,7 @@ const convertQuoteToInvoice = async (req, res) => {
       return res.status(400).json({ message: "This quote is already converted to an invoice" });
     }
 
-    const invoice = await createInvoiceFromQuote(quote, req.body.dueDate);
+    const invoice = await createInvoiceFromQuote(quote, req.body?.dueDate);
 
     quote.status = "converted";
     quote.acceptedAt = quote.acceptedAt || new Date();

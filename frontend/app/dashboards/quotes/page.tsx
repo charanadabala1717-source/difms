@@ -271,7 +271,10 @@ export default function QuotesPage() {
       setError("");
       setSuccessMessage("");
       setConvertingQuoteId(quote._id);
-      await apiRequest(`/quotes/${quote._id}/convert-to-invoice`, { method: "POST" });
+      await apiRequest(`/quotes/${quote._id}/convert-to-invoice`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
       setSuccessMessage("Quote converted to invoice and payment email sent");
       await loadData();
     } catch (err) {
