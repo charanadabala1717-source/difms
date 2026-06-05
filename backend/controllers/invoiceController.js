@@ -43,7 +43,10 @@ const formatInvoiceStatus = (invoice) => {
 
 const getInvoices = async (req, res) => {
   try {
-    const invoices = await Invoice.find({ user: req.user._id, isDeleted: { $ne: true } })
+    const invoices = await Invoice.find({
+      organization: req.organization._id,
+      isDeleted: { $ne: true },
+    })
       .populate("customer")
       .populate("quote")
       .sort({ createdAt: -1 });
@@ -92,10 +95,10 @@ const isInvoicePaid = (invoice) => {
   return invoice.status === "paid" || balanceDue <= 0 || amountPaid >= total;
 };
 
-const getReceiptContext = async (invoiceId, userId) => {
+const getReceiptContext = async (invoiceId, organizationId) => {
   const invoice = await Invoice.findOne({
     _id: invoiceId,
-    user: userId,
+    organization: organizationId,
     isDeleted: { $ne: true },
   }).populate("customer");
 
@@ -114,7 +117,7 @@ const getReceiptContext = async (invoiceId, userId) => {
 
   const receipt = await Receipt.findOne({
     invoice: invoice._id,
-    user: userId,
+    organization: organizationId,
     isDeleted: { $ne: true },
   }).sort({ createdAt: -1 });
 
@@ -148,13 +151,13 @@ const createInvoice = async (req, res) => {
     if (customer) {
       invoiceCustomer = await Customer.findOne({
         _id: customer,
-        user: req.user._id,
+        organization: req.organization._id,
         isDeleted: { $ne: true },
       });
     } else {
       invoiceCustomer = await Customer.findOneAndUpdate(
-        { name: customerName, user: req.user._id, isDeleted: { $ne: true } },
-        { name: customerName, user: req.user._id },
+        { name: customerName, organization: req.organization._id, isDeleted: { $ne: true } },
+        { name: customerName, user: req.user._id, organization: req.organization._id },
         { new: true, upsert: true }
       );
     }
@@ -169,6 +172,7 @@ const createInvoice = async (req, res) => {
 
     const invoice = await Invoice.create({
       user: req.user._id,
+      organization: req.organization._id,
       customer: invoiceCustomer._id,
       invoiceNumber: createNumber("INV"),
       items: [
@@ -202,7 +206,7 @@ const getInvoiceById = async (req, res) => {
   try {
     const invoice = await Invoice.findOne({
       _id: req.params.id,
-      user: req.user._id,
+      organization: req.organization._id,
       isDeleted: { $ne: true },
     })
       .populate("customer")
@@ -222,7 +226,7 @@ const updateInvoice = async (req, res) => {
   try {
     const invoice = await Invoice.findOne({
       _id: req.params.id,
-      user: req.user._id,
+      organization: req.organization._id,
       isDeleted: { $ne: true },
     });
 
@@ -241,7 +245,7 @@ const updateInvoice = async (req, res) => {
 
     if (customerName !== undefined) {
       await Customer.findOneAndUpdate(
-        { _id: invoice.customer, user: req.user._id, isDeleted: { $ne: true } },
+        { _id: invoice.customer, organization: req.organization._id, isDeleted: { $ne: true } },
         { name: customerName },
         { new: true }
       );
@@ -284,7 +288,7 @@ const deleteInvoice = async (req, res) => {
     const invoice = await Invoice.findOneAndUpdate(
       {
         _id: req.params.id,
-        user: req.user._id,
+        organization: req.organization._id,
         isDeleted: { $ne: true },
       },
       {
@@ -300,11 +304,11 @@ const deleteInvoice = async (req, res) => {
 
     await Promise.all([
       Receipt.updateMany(
-        { invoice: invoice._id, user: req.user._id },
+        { invoice: invoice._id, organization: req.organization._id },
         { isDeleted: true, deletedAt: new Date() }
       ),
       Payment.updateMany(
-        { invoice: invoice._id, user: req.user._id },
+        { invoice: invoice._id, organization: req.organization._id },
         { isDeleted: true, deletedAt: new Date() }
       ),
     ]);
@@ -319,7 +323,7 @@ const sendReceiptEmail = async (req, res) => {
   try {
     const { invoice, receipt, error: receiptError } = await getReceiptContext(
       req.params.id,
-      req.user._id
+      req.organization._id
     );
 
     if (receiptError) {
@@ -338,12 +342,15 @@ const sendReceiptEmail = async (req, res) => {
       invoice,
       customer: invoice.customer,
       logoPath,
+      company: req.organization,
     });
 
-    const companyName = process.env.COMPANY_NAME || "Brent labs";
+    const companyName = req.organization?.name || process.env.COMPANY_NAME || "Brent labs";
     const companyAddress =
+      req.organization?.address ||
       process.env.COMPANY_ADDRESS ||
       "Brent labs Accounts Department, London, United Kingdom";
+    const companyEmail = req.organization?.email || process.env.COMPANY_EMAIL || process.env.MAIL_FROM || "";
 
     const logoHtml = hasLogoFile
       ? `<img src="cid:receipt-logo" alt="${companyName}" style="height:56px;width:56px;object-fit:cover;border-radius:10px;display:block;" />`
@@ -428,7 +435,7 @@ const sendReceiptEmail = async (req, res) => {
             <div style="background:#f1f5f9;border-top:1px solid #e2e8f0;padding:18px 28px;color:#475569;font-size:13px;line-height:1.5;">
               <strong>${companyName}</strong><br />
               ${companyAddress}<br />
-              ${process.env.COMPANY_EMAIL || process.env.MAIL_FROM || ""}
+              ${companyEmail}
             </div>
           </div>
         </div>
@@ -461,7 +468,7 @@ const downloadInvoiceDocumentPdf = async (req, res) => {
   try {
     const invoice = await Invoice.findOne({
       _id: req.params.id,
-      user: req.user._id,
+      organization: req.organization._id,
       isDeleted: { $ne: true },
     }).populate("customer");
 
@@ -478,6 +485,7 @@ const downloadInvoiceDocumentPdf = async (req, res) => {
         invoice,
         customer: invoice.customer,
         logoPath: getReceiptLogoPath(),
+        company: req.organization,
       });
 
       res.setHeader("Content-Type", "application/pdf");
@@ -487,7 +495,7 @@ const downloadInvoiceDocumentPdf = async (req, res) => {
 
     const receipt = (await Receipt.findOne({
         invoice: invoice._id,
-        user: req.user._id,
+        organization: req.organization._id,
         isDeleted: { $ne: true },
       }).sort({ createdAt: -1 })) || {
         receiptNumber: `RCT-${invoice.invoiceNumber}`,
@@ -501,6 +509,7 @@ const downloadInvoiceDocumentPdf = async (req, res) => {
       invoice,
       customer: invoice.customer,
       logoPath: getReceiptLogoPath(),
+      company: req.organization,
     });
 
     res.setHeader("Content-Type", "application/pdf");
@@ -515,7 +524,7 @@ const sendInvoice = async (req, res) => {
   try {
     const invoice = await Invoice.findOne({
       _id: req.params.id,
-      user: req.user._id,
+      organization: req.organization._id,
       isDeleted: { $ne: true },
     });
 

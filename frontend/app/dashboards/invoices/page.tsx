@@ -240,7 +240,7 @@ export default function InvoicesPage() {
     <div className="min-h-screen">
       <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white sm:text-4xl">
+          <h1 className="text-2xl font-bold text-white sm:text-4xl">
             Invoices
           </h1>
           <p className="mt-2 text-sm text-slate-300 sm:text-base">
@@ -286,7 +286,7 @@ export default function InvoicesPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-full border-separate border-spacing-y-3">
+          <table className="w-full min-w-max border-separate border-spacing-y-3">
             <thead>
               <tr>
                 <th className="px-4 text-left text-sm font-semibold text-slate-400">
@@ -408,7 +408,7 @@ export default function InvoicesPage() {
             onClick={closeModal}
           />
 
-          <div className="fixed inset-x-4 top-4 z-50 max-h-screen overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-4 text-white shadow-2xl sm:left-1/2 sm:top-1/2 sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:p-6">
+          <div className="fixed inset-x-4 top-4 z-50 max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-4 text-white shadow-2xl sm:left-1/2 sm:top-1/2 sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:p-6">
             <div className="mb-5 flex items-center justify-between">
               <div>
                 <h2 className="text-2xl font-semibold">

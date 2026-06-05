@@ -49,7 +49,7 @@ const createQuote = async (req, res) => {
 
     const existingCustomer = await Customer.findOne({
       _id: customer,
-      user: req.user._id,
+      organization: req.organization._id,
       isDeleted: { $ne: true },
     });
 
@@ -64,6 +64,7 @@ const createQuote = async (req, res) => {
 
     const quote = await Quote.create({
       user: req.user._id,
+      organization: req.organization._id,
       customer,
       quoteNumber: createNumber("QTE"),
       ...totals,
@@ -84,7 +85,10 @@ const createQuote = async (req, res) => {
 
 const getQuotes = async (req, res) => {
   try {
-    const quotes = await Quote.find({ user: req.user._id, isDeleted: { $ne: true } })
+    const quotes = await Quote.find({
+      organization: req.organization._id,
+      isDeleted: { $ne: true },
+    })
       .populate("customer")
       .sort({ createdAt: -1 });
 
@@ -98,7 +102,7 @@ const getQuoteById = async (req, res) => {
   try {
     const quote = await Quote.findOne({
       _id: req.params.id,
-      user: req.user._id,
+      organization: req.organization._id,
       isDeleted: { $ne: true },
     }).populate("customer");
 
@@ -116,7 +120,7 @@ const updateQuote = async (req, res) => {
   try {
     const quote = await Quote.findOne({
       _id: req.params.id,
-      user: req.user._id,
+      organization: req.organization._id,
       isDeleted: { $ne: true },
     });
 
@@ -133,7 +137,7 @@ const updateQuote = async (req, res) => {
     if (customer) {
       const existingCustomer = await Customer.findOne({
         _id: customer,
-        user: req.user._id,
+        organization: req.organization._id,
         isDeleted: { $ne: true },
       });
 
@@ -178,7 +182,7 @@ const sendQuote = async (req, res) => {
   try {
     const quote = await Quote.findOne({
       _id: req.params.id,
-      user: req.user._id,
+      organization: req.organization._id,
       isDeleted: { $ne: true },
     }).populate("customer");
 
@@ -197,6 +201,7 @@ const sendQuote = async (req, res) => {
     if (!quote.actionToken) {
       quote.actionToken = createToken();
       quote.actionTokenExpires = new Date(Date.now() + 1000 * 60 * 60 * 24 * 14);
+      await quote.save();
     }
 
     const email = await sendQuoteEmail(quote);
@@ -225,7 +230,7 @@ const acceptQuote = async (req, res) => {
   try {
     const quote = await Quote.findOne({
       _id: req.params.id,
-      user: req.user._id,
+      organization: req.organization._id,
       isDeleted: { $ne: true },
     }).populate("customer");
 
@@ -250,7 +255,7 @@ const convertQuoteToInvoice = async (req, res) => {
   try {
     const quote = await Quote.findOne({
       _id: req.params.id,
-      user: req.user._id,
+      organization: req.organization._id,
       isDeleted: { $ne: true },
     });
 
@@ -264,7 +269,7 @@ const convertQuoteToInvoice = async (req, res) => {
 
     const existingInvoice = await Invoice.findOne({
       quote: quote._id,
-      user: req.user._id,
+      organization: req.organization._id,
       isDeleted: { $ne: true },
     });
 

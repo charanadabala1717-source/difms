@@ -25,6 +25,20 @@ type CustomerResponse = {
   address?: string;
 };
 
+type OrganizationOption = {
+  _id: string;
+  name: string;
+};
+
+type UserResponse = {
+  email?: string;
+  role?: string;
+  organizations?: OrganizationOption[];
+  activeOrganization?: OrganizationOption | null;
+};
+
+const platformOwnerEmail = process.env.NEXT_PUBLIC_SUPER_ADMIN_CREATOR_EMAIL;
+
 const emptyForm = {
   name: "",
   email: "",
@@ -294,6 +308,8 @@ export default function CustomersPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null);
   const [formData, setFormData] = useState(emptyForm);
+  const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
+  const [selectedOrganizationIds, setSelectedOrganizationIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [countrySearch, setCountrySearch] = useState("");
@@ -328,9 +344,32 @@ export default function CustomersPage() {
     }
   }, []);
 
+  const loadUserOrganizations = useCallback(async () => {
+    try {
+      const user = await apiRequest<UserResponse>("/auth/me");
+      const userOrganizations =
+        platformOwnerEmail && user.email === platformOwnerEmail && user.role === "super_admin"
+          ? await apiRequest<OrganizationOption[]>("/admin/organizations")
+          : user.organizations || [];
+
+      setOrganizations(userOrganizations);
+      setSelectedOrganizationIds(
+        user.activeOrganization?._id
+          ? [user.activeOrganization._id]
+          : userOrganizations[0]?._id
+          ? [userOrganizations[0]._id]
+          : []
+      );
+    } catch {
+      setOrganizations([]);
+      setSelectedOrganizationIds([]);
+    }
+  }, []);
+
   useEffect(() => {
     loadCustomers();
-  }, [loadCustomers]);
+    loadUserOrganizations();
+  }, [loadCustomers, loadUserOrganizations]);
 
   const filteredCustomers = useMemo(() => {
     const query = searchTerm.toLowerCase();
@@ -364,6 +403,13 @@ export default function CustomersPage() {
   const openAddModal = () => {
     setEditingCustomerId(null);
     setFormData(emptyForm);
+    setSelectedOrganizationIds((current) =>
+      current.length > 0
+        ? current
+        : organizations[0]?._id
+        ? [organizations[0]._id]
+        : []
+    );
     setCountrySearch("");
     setIsCountryDropdownOpen(false);
     setIsModalOpen(true);
@@ -404,10 +450,29 @@ export default function CustomersPage() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
+  const handleOrganizationToggle = (organizationId: string) => {
+    setSelectedOrganizationIds((current) =>
+      current.includes(organizationId)
+        ? current.filter((id) => id !== organizationId)
+        : [...current, organizationId]
+    );
+  };
+
+  const handleAllOrganizationsToggle = () => {
+    setSelectedOrganizationIds((current) =>
+      current.length === organizations.length ? [] : organizations.map((organization) => organization._id)
+    );
+  };
+
   const handleSave = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (!formData.name.trim() || !formData.email.trim() || !formData.phoneNumber.trim()) {
+      return;
+    }
+
+    if (!editingCustomerId && selectedOrganizationIds.length === 0) {
+      setError("Please select at least one company for this customer");
       return;
     }
 
@@ -420,6 +485,7 @@ export default function CustomersPage() {
         phone: `${formData.countryCode} ${formData.phoneNumber.trim()}`,
         phoneNumber: formData.phoneNumber.trim(),
         address: formData.address.trim(),
+        ...(!editingCustomerId ? { organizationIds: selectedOrganizationIds } : {}),
       };
 
       if (editingCustomerId) {
@@ -455,7 +521,7 @@ export default function CustomersPage() {
     <div className="min-h-screen">
       <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white sm:text-4xl">Customers</h1>
+          <h1 className="text-2xl font-bold text-white sm:text-4xl">Customers</h1>
           <p className="mt-2 text-sm text-slate-300 sm:text-base">
             Manage reusable customer identity details.
           </p>
@@ -501,7 +567,7 @@ export default function CustomersPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-full border-separate border-spacing-y-3">
+          <table className="w-full min-w-max border-separate border-spacing-y-3">
             <thead>
               <tr>
                 {["Customer ID", "Name", "Email", "Phone", "Address", "Actions"].map(
@@ -582,7 +648,7 @@ export default function CustomersPage() {
         <>
           <div className="fixed inset-0 z-40 bg-black/50" onClick={closeModal} />
 
-          <div className="fixed inset-x-4 top-4 z-50 max-h-screen overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-4 text-white shadow-2xl sm:left-1/2 sm:top-1/2 sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:p-6">
+          <div className="fixed inset-x-4 top-4 z-50 max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-4 text-white shadow-2xl sm:left-1/2 sm:top-1/2 sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:p-6">
             <div className="mb-5 flex items-center justify-between">
               <div>
                 <h2 className="text-2xl font-semibold">
@@ -603,6 +669,42 @@ export default function CustomersPage() {
             </div>
 
             <form onSubmit={handleSave} className="space-y-4">
+              {!editingCustomerId && organizations.length > 1 && (
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-300">
+                    Company
+                  </label>
+                  <div className="rounded-xl border border-slate-700 bg-slate-800 p-3">
+                    <label className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 text-sm text-slate-200 transition hover:bg-slate-700/60">
+                      <input
+                        type="checkbox"
+                        checked={selectedOrganizationIds.length === organizations.length}
+                        onChange={handleAllOrganizationsToggle}
+                        className="h-4 w-4 accent-blue-600"
+                      />
+                      <span>All companies</span>
+                    </label>
+
+                    <div className="mt-2 max-h-40 space-y-1 overflow-y-auto border-t border-slate-700 pt-2">
+                      {organizations.map((organization) => (
+                        <label
+                          key={organization._id}
+                          className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 text-sm text-slate-200 transition hover:bg-slate-700/60"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedOrganizationIds.includes(organization._id)}
+                            onChange={() => handleOrganizationToggle(organization._id)}
+                            className="h-4 w-4 accent-blue-600"
+                          />
+                          <span>{organization.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-300">
                   Name

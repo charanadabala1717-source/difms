@@ -32,6 +32,7 @@ const recordInvoicePayment = async ({
 
   const payment = await Payment.create({
     user: invoice.user,
+    organization: invoice.organization,
     invoice: invoice._id,
     customer: invoice.customer,
     amount: paymentAmount,
@@ -52,6 +53,7 @@ const recordInvoicePayment = async ({
 
   const receipt = await Receipt.create({
     user: invoice.user,
+    organization: invoice.organization,
     payment: payment._id,
     invoice: invoice._id,
     customer: invoice.customer,

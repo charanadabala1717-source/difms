@@ -55,7 +55,7 @@ const formatServiceRows = (items = [], currency) => {
 const createInvoiceFromQuote = async (quote, dueDate) => {
   const existingInvoice = await Invoice.findOne({
     quote: quote._id,
-    user: quote.user,
+    organization: quote.organization,
     isDeleted: { $ne: true },
   });
 
@@ -65,6 +65,7 @@ const createInvoiceFromQuote = async (quote, dueDate) => {
 
   const invoice = await Invoice.create({
     user: quote.user,
+    organization: quote.organization,
     customer: quote.customer,
     quote: quote._id,
     invoiceNumber: createNumber("INV"),
@@ -89,8 +90,12 @@ const sendQuoteEmail = async (quote) => {
   const populatedQuote = await Quote.findOne({
     _id: quote._id,
     isDeleted: { $ne: true },
-  }).populate("customer");
+  })
+    .populate("customer")
+    .populate("organization");
   const customer = populatedQuote.customer;
+  const company = populatedQuote.organization;
+  const companyName = company?.name || "Brent labs";
 
   if (!customer.email) {
     throw new Error("Customer email is required before sending a quote");
@@ -115,6 +120,7 @@ const sendQuoteEmail = async (quote) => {
       dueDate: populatedQuote.validUntil,
     },
     customer,
+    company,
     documentTitle: "Quote",
     documentSubtitle: "Official Quote",
     numberLabel: "Quote Number",
@@ -123,7 +129,7 @@ const sendQuoteEmail = async (quote) => {
 
   return sendEmail({
     to: customer.email,
-    subject: `Quote ${populatedQuote.quoteNumber} from Brent labs`,
+    subject: `Quote ${populatedQuote.quoteNumber} from ${companyName}`,
     html: `
       <div style="font-family: Arial, sans-serif; line-height: 1.5;">
         <h2>Quote ${populatedQuote.quoteNumber}</h2>
@@ -166,8 +172,12 @@ const sendPaymentEmail = async (invoice) => {
   const populatedInvoice = await Invoice.findOne({
     _id: invoice._id,
     isDeleted: { $ne: true },
-  }).populate("customer");
+  })
+    .populate("customer")
+    .populate("organization");
   const customer = populatedInvoice.customer;
+  const company = populatedInvoice.organization;
+  const companyName = company?.name || "Brent labs";
 
   if (!customer.email) {
     throw new Error("Customer email is required before sending payment email");
@@ -186,11 +196,12 @@ const sendPaymentEmail = async (invoice) => {
   const invoicePdfBuffer = await generateInvoicePdf({
     invoice: populatedInvoice,
     customer,
+    company,
   });
 
   return sendEmail({
     to: customer.email,
-    subject: `Payment request for invoice ${populatedInvoice.invoiceNumber}`,
+    subject: `Payment request from ${companyName} for invoice ${populatedInvoice.invoiceNumber}`,
     html: `
       <div style="font-family: Arial, sans-serif; line-height: 1.5;">
         <h2>Invoice ${populatedInvoice.invoiceNumber}</h2>

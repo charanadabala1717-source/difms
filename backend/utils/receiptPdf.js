@@ -11,11 +11,12 @@ const formatDate = (date) => {
   }).format(new Date(date));
 };
 
-const companyName = () => process.env.COMPANY_NAME || "Brent labs";
-const companyAddress = () =>
+const getCompanyName = (company) => company?.name || process.env.COMPANY_NAME || "Brent labs";
+const getCompanyAddress = (company) =>
+  company?.address ||
   process.env.COMPANY_ADDRESS ||
   "Brent labs Accounts Department, London, United Kingdom";
-const companyEmail = () => process.env.COMPANY_EMAIL || process.env.MAIL_FROM || "";
+const getCompanyEmail = (company) => company?.email || process.env.COMPANY_EMAIL || process.env.MAIL_FROM || "";
 const defaultLogoPath = () => path.join(__dirname, "..", "assets", "intern.jpg");
 
 const formatStatus = (invoice) => {
@@ -57,9 +58,9 @@ const drawHeader = (doc, subtitle, logoPath) => {
       .fillColor("#ffffff")
       .font("Helvetica-Bold")
       .fontSize(18)
-      .text(companyName().slice(0, 2).toUpperCase(), 64, 52);
+      .text(getCompanyName(doc.company).slice(0, 2).toUpperCase(), 64, 52);
   }
-  doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(24).text(companyName(), 120, 38);
+  doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(24).text(getCompanyName(doc.company), 120, 38);
   doc.font("Helvetica").fontSize(11).fillColor("#cbd5e1").text(subtitle, 120, 68);
 };
 
@@ -90,8 +91,8 @@ const drawFooter = (doc, message) => {
     .font("Helvetica")
     .fontSize(9)
     .fillColor("#64748b")
-    .text(companyAddress(), 50, 760, { width: 330 })
-    .text(companyEmail(), 50, 774, { width: 330 });
+    .text(getCompanyAddress(doc.company), 50, 760, { width: 330 })
+    .text(getCompanyEmail(doc.company), 50, 774, { width: 330 });
   doc.font("Helvetica-Bold").fillColor("#0f172a").text(message, 380, 760, {
     width: 165,
     align: "right",
@@ -106,6 +107,7 @@ const generateInvoicePdf = ({
   documentSubtitle = "Official Invoice",
   numberLabel = "Invoice Number",
   numberValue,
+  company,
 }) => {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", margin: 50 });
@@ -116,6 +118,7 @@ const generateInvoicePdf = ({
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
 
+    doc.company = company;
     drawHeader(doc, documentSubtitle, logoPath);
     doc.invoiceCurrency = invoice.currency;
 
@@ -157,7 +160,7 @@ const generateInvoicePdf = ({
   });
 };
 
-const generateReceiptPdf = ({ receipt, invoice, customer, logoPath = defaultLogoPath() }) => {
+const generateReceiptPdf = ({ receipt, invoice, customer, logoPath = defaultLogoPath(), company }) => {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", margin: 50 });
     const chunks = [];
@@ -166,6 +169,7 @@ const generateReceiptPdf = ({ receipt, invoice, customer, logoPath = defaultLogo
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
 
+    doc.company = company;
     drawHeader(doc, "Official Payment Receipt", logoPath);
     doc.invoiceCurrency = invoice.currency;
 

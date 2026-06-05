@@ -1,7 +1,18 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+const OrganizationMember = require("../models/OrganizationMember");
 const { normalizeCurrency } = require("../utils/currency");
+const {
+  createOrganizationForUser,
+  getActiveMembershipForUser,
+  listOrganizationsForUser,
+  serializeOrganization,
+} = require("../utils/organization");
+
+const SUPER_ADMIN_CREATOR_EMAIL = process.env.SUPER_ADMIN_CREATOR_EMAIL;
+const isSuperAdminCreator = (user) =>
+  SUPER_ADMIN_CREATOR_EMAIL && user.email === SUPER_ADMIN_CREATOR_EMAIL;
 
 const generateToken = (userId) => {
   return jwt.sign({ id: userId }, process.env.JWT_SECRET, {
@@ -9,9 +20,38 @@ const generateToken = (userId) => {
   });
 };
 
+const buildAuthResponse = async (user, token) => {
+  let membership = await getActiveMembershipForUser(user._id);
+
+  if (!membership && user.role !== "super_admin") {
+    const created = await createOrganizationForUser({
+      user,
+      companyName: `${user.name}'s Company`,
+      currency: user.currency,
+    });
+    membership = await getActiveMembershipForUser(created.membership.user);
+  }
+
+  const organizations = await listOrganizationsForUser(user._id);
+  const activeOrganization = membership?.organization
+    ? serializeOrganization(membership.organization, membership)
+    : null;
+
+  return {
+    _id: user._id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    currency: user.currency,
+    organizations,
+    activeOrganization,
+    token,
+  };
+};
+
 const registerUser = async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, companyName, currency } = req.body;
 
     if (!name || !email || !password) {
       return res.status(400).json({ message: "Name, email, and password are required" });
@@ -34,16 +74,16 @@ const registerUser = async (req, res) => {
       name,
       email,
       password: hashedPassword,
+      currency: normalizeCurrency(currency),
     });
 
-    res.status(201).json({
-      _id: user._id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
+    await createOrganizationForUser({
+      user,
+      companyName: companyName || `${name}'s Company`,
       currency: user.currency,
-      token: generateToken(user._id),
     });
+
+    res.status(201).json(await buildAuthResponse(user, generateToken(user._id)));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -69,21 +109,25 @@ const loginUser = async (req, res) => {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
-    res.json({
-      _id: user._id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      currency: user.currency,
-      token: generateToken(user._id),
-    });
+    res.json(await buildAuthResponse(user, generateToken(user._id)));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
 const getMe = async (req, res) => {
-  res.json(req.user);
+  const organizations = await listOrganizationsForUser(req.user._id);
+  res.json({
+    _id: req.user._id,
+    name: req.user.name,
+    email: req.user.email,
+    role: req.user.role,
+    currency: req.user.currency,
+    organizations,
+    activeOrganization: req.organization
+      ? serializeOrganization(req.organization, req.membership)
+      : null,
+  });
 };
 
 const updateMe = async (req, res) => {
@@ -93,16 +137,110 @@ const updateMe = async (req, res) => {
     }
 
     const user = await req.user.save();
+    if (req.organization && req.body.currency && ["owner", "admin"].includes(req.membership?.role)) {
+      req.organization.currency = normalizeCurrency(req.body.currency);
+      await req.organization.save();
+    }
+
+    const organizations = await listOrganizationsForUser(user._id);
     res.json({
       _id: user._id,
       name: user.name,
       email: user.email,
       role: user.role,
       currency: user.currency,
+      organizations,
+      activeOrganization: req.organization
+        ? serializeOrganization(req.organization, req.membership)
+        : null,
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-module.exports = { registerUser, loginUser, getMe, updateMe };
+const promoteSuperAdmin = async (req, res) => {
+  try {
+    if (!isSuperAdminCreator(req.user)) {
+      return res.status(403).json({
+        message: "Only the platform owner can create super admins",
+      });
+    }
+
+    const email = req.body.email?.trim().toLowerCase();
+    const organizationIds = Array.isArray(req.body.organizationIds)
+      ? req.body.organizationIds.filter(Boolean)
+      : [];
+
+    if (!email) {
+      return res.status(400).json({ message: "User email is required" });
+    }
+
+    if (organizationIds.length === 0) {
+      return res.status(400).json({ message: "At least one company must be selected" });
+    }
+
+    if (!isSuperAdminCreator(req.user)) {
+      const creatorMemberships = await OrganizationMember.find({
+        user: req.user._id,
+        organization: { $in: organizationIds },
+        status: "active",
+      }).select("organization");
+
+      if (creatorMemberships.length !== organizationIds.length) {
+        return res.status(403).json({
+          message: "You do not have access to one or more selected companies",
+        });
+      }
+    }
+
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found. Please register the user before promoting them.",
+      });
+    }
+
+    user.role = "super_admin";
+    await user.save();
+
+    await Promise.all(
+      organizationIds.map((organizationId) =>
+        OrganizationMember.findOneAndUpdate(
+          {
+            organization: organizationId,
+            user: user._id,
+          },
+          {
+            organization: organizationId,
+            user: user._id,
+            role: "admin",
+            status: "active",
+            invitedBy: req.user._id,
+            joinedAt: new Date(),
+          },
+          {
+            upsert: true,
+            new: true,
+            setDefaultsOnInsert: true,
+          }
+        )
+      )
+    );
+
+    res.json({
+      message: "User promoted to super admin successfully",
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+module.exports = { registerUser, loginUser, getMe, updateMe, promoteSuperAdmin };

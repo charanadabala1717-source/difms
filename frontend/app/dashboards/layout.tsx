@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { clearAuthSession, getToken } from "../difm/lib/api";
+import { apiRequest, clearAuthSession, getToken, setAuthSession } from "../difm/lib/api";
 import {
   LayoutDashboard,
   Users,
@@ -23,6 +23,20 @@ const navItems = [
   { name: "Settings", path: "/dashboards/settings", icon: Settings },
 ];
 
+type AuthUser = {
+  email?: string;
+  role?: string;
+  activeOrganization?: {
+    name?: string;
+  } | null;
+};
+
+const allPageNames = [
+  ...navItems,
+  { name: "Companies", path: "/dashboards/super-admin/companies" },
+  { name: "Make Super Admin", path: "/dashboards/super-admin/make-super-admin" },
+];
+
 export default function DashboardLayout({
   children,
 }: {
@@ -31,15 +45,32 @@ export default function DashboardLayout({
   const router = useRouter();
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [companyName, setCompanyName] = useState("Company");
 
   useEffect(() => {
-    if (!getToken()) {
+    const token = getToken();
+
+    if (!token) {
       router.push("/");
+      return;
     }
+
+    const refreshUser = async () => {
+      try {
+        const user = await apiRequest<AuthUser>("/auth/me");
+        setAuthSession(token, user);
+        setCompanyName(user.activeOrganization?.name || "Company");
+      } catch {
+        clearAuthSession();
+        router.push("/");
+      }
+    };
+
+    refreshUser();
   }, [router]);
 
   const currentPageName = useMemo(() => {
-    const found = navItems.find((item) => item.path === pathname);
+    const found = allPageNames.find((item) => item.path === pathname);
     return found?.name ?? "Dashboard";
   }, [pathname]);
 
@@ -64,14 +95,14 @@ export default function DashboardLayout({
         <div className="flex items-center gap-3">
           <Image
             src="/images/intern.jpg"
-            alt="Brent labs Logo"
+            alt={`${companyName} Logo`}
             width={42}
             height={42}
             className="h-auto w-auto rounded-md object-contain"
             priority
           />
           <div>
-            <h1 className="text-sm font-bold text-slate-900">Brent labs</h1>
+            <h1 className="text-sm font-bold text-slate-900">{companyName}</h1>
             <p className="text-xs text-slate-500">{currentPageName}</p>
           </div>
         </div>
@@ -88,19 +119,19 @@ export default function DashboardLayout({
 
       <div className="flex min-h-screen">
         {/* DESKTOP SIDEBAR */}
-        <aside className="hidden w-72 flex-col bg-gradient-to-b from-slate-600 to-slate-900 text-white shadow-xl lg:flex">
+        <aside className="hidden w-72 shrink-0 flex-col bg-gradient-to-b from-slate-600 to-slate-900 text-white shadow-xl lg:flex">
           <div className="border-b border-slate-700 px-5 py-6">
             <div className="flex items-center gap-4">
               <Image
                 src="/images/intern.jpg"
-                alt="Brent labs Logo"
+                alt={`${companyName} Logo`}
                 width={70}
                 height={70}
                 className="h-auto w-auto rounded-md object-contain"
                 priority
               />
               <div>
-                <h1 className="text-xl font-bold tracking-wide">Brent labs</h1>
+                <h1 className="text-xl font-bold tracking-wide">{companyName}</h1>
                 <p className="text-sm text-slate-300">Admin Panel</p>
               </div>
             </div>
@@ -146,19 +177,19 @@ export default function DashboardLayout({
               onClick={() => setMobileMenuOpen(false)}
             />
 
-            <aside className="fixed left-0 top-0 z-50 flex h-full w-72 flex-col bg-gradient-to-b from-slate-600 to-slate-900 text-white shadow-2xl lg:hidden">
+            <aside className="fixed left-0 top-0 z-50 flex h-full w-72 max-w-[85vw] flex-col bg-gradient-to-b from-slate-600 to-slate-900 text-white shadow-2xl lg:hidden">
               <div className="flex items-center justify-between border-b border-slate-700 px-5 py-5">
                 <div className="flex items-center gap-3">
                   <Image
                     src="/images/intern.jpg"
-                    alt="Brent labs Logo"
+                    alt={`${companyName} Logo`}
                     width={52}
                     height={52}
                     className="h-auto w-auto rounded-md object-contain"
                     priority
                   />
                   <div>
-                    <h1 className="text-lg font-bold tracking-wide">Brent labs</h1>
+                    <h1 className="text-lg font-bold tracking-wide">{companyName}</h1>
                     <p className="text-xs text-slate-300">Admin Panel</p>
                   </div>
                 </div>

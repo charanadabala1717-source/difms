@@ -112,6 +112,7 @@ export default function OverviewPage() {
   const [payments, setPayments] = useState<PaymentResponse[]>([]);
   const [quotes, setQuotes] = useState<QuoteResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [chartsReady, setChartsReady] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -139,6 +140,9 @@ export default function OverviewPage() {
     };
 
     loadOverview();
+    const frameId = window.requestAnimationFrame(() => setChartsReady(true));
+
+    return () => window.cancelAnimationFrame(frameId);
   }, []);
 
   const overview = useMemo(() => {
@@ -230,9 +234,9 @@ export default function OverviewPage() {
   return (
     <div className="min-h-screen">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-white sm:text-4xl">Overview</h1>
+        <h1 className="text-2xl font-bold text-white sm:text-4xl">Overview</h1>
         <p className="mt-2 text-sm text-slate-300 sm:text-base">
-          {isLoading ? "Loading live dashboard data..." : "Welcome to the Brent labs dashboard overview."}
+          {isLoading ? "Loading live dashboard data..." : "Welcome to your dashboard overview."}
         </p>
       </div>
 
@@ -298,24 +302,26 @@ export default function OverviewPage() {
           </p>
 
           <div className="mt-6 h-64 min-w-0">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={overview.revenueData}
-                  dataKey="value"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={90}
-                  label
-                >
-                  {overview.revenueData.map((item, index) => (
-                    <Cell key={index} fill={item.color} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
+            {chartsReady ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={overview.revenueData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={90}
+                    label
+                  >
+                    {overview.revenueData.map((item, index) => (
+                      <Cell key={index} fill={item.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : null}
           </div>
 
           <div className="mt-6 flex flex-wrap justify-center gap-6">
@@ -344,22 +350,24 @@ export default function OverviewPage() {
           </p>
 
           <div className="mt-6 h-72 min-w-0">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={overview.revenueGrowthData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
-                <XAxis dataKey="month" stroke="#cbd5e1" />
-                <YAxis stroke="#cbd5e1" />
-                <Tooltip />
-                <Line
-                  type="monotone"
-                  dataKey="revenue"
-                  stroke="#3b82f6"
-                  strokeWidth={3}
-                  dot={{ r: 5 }}
-                  activeDot={{ r: 7 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+            {chartsReady ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={overview.revenueGrowthData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
+                  <XAxis dataKey="month" stroke="#cbd5e1" />
+                  <YAxis stroke="#cbd5e1" />
+                  <Tooltip />
+                  <Line
+                    type="monotone"
+                    dataKey="revenue"
+                    stroke="#3b82f6"
+                    strokeWidth={3}
+                    dot={{ r: 5 }}
+                    activeDot={{ r: 7 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : null}
           </div>
         </div>
       </div>
@@ -429,7 +437,7 @@ export default function OverviewPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-full border-separate border-spacing-y-3">
+          <table className="w-full min-w-max border-separate border-spacing-y-3">
             <thead>
               <tr>
                 <th className="px-4 text-left text-sm font-semibold text-slate-400">

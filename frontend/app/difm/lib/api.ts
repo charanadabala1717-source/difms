@@ -9,6 +9,13 @@ export const getToken = () => {
   return localStorage.getItem("token");
 };
 
+const getActiveOrganizationId = () => {
+  if (typeof window === "undefined") return null;
+
+  const user = JSON.parse(localStorage.getItem("user") || "null");
+  return user?.activeOrganization?._id || null;
+};
+
 export const setAuthSession = (token: string, user: unknown) => {
   localStorage.setItem("token", token);
   localStorage.setItem("user", JSON.stringify(user));
@@ -25,12 +32,14 @@ export const apiRequest = async <T>(
 ): Promise<T> => {
   const { skipAuth, headers, ...rest } = options;
   const token = getToken();
+  const organizationId = getActiveOrganizationId();
 
   const response = await fetch(`${API_URL}${endpoint}`, {
     ...rest,
     headers: {
       "Content-Type": "application/json",
       ...(token && !skipAuth ? { Authorization: `Bearer ${token}` } : {}),
+      ...(organizationId && !skipAuth ? { "x-organization-id": organizationId } : {}),
       ...headers,
     },
   });
@@ -50,11 +59,13 @@ export const apiBlobRequest = async (
 ): Promise<{ blob: Blob; filename?: string }> => {
   const { skipAuth, headers, ...rest } = options;
   const token = getToken();
+  const organizationId = getActiveOrganizationId();
 
   const response = await fetch(`${API_URL}${endpoint}`, {
     ...rest,
     headers: {
       ...(token && !skipAuth ? { Authorization: `Bearer ${token}` } : {}),
+      ...(organizationId && !skipAuth ? { "x-organization-id": organizationId } : {}),
       ...headers,
     },
   });

@@ -3,6 +3,10 @@ const Invoice = require("../models/Invoice");
 const Payment = require("../models/Payment");
 const Quote = require("../models/Quote");
 const Receipt = require("../models/Receipt");
+const OrganizationMember = require("../models/OrganizationMember");
+
+const platformOwnerEmail = () => process.env.SUPER_ADMIN_CREATOR_EMAIL;
+const isPlatformOwner = (user) => platformOwnerEmail() && user.email === platformOwnerEmail();
 
 const pickCustomerFields = (body) => ({
   name: body.name,
@@ -16,17 +20,38 @@ const pickCustomerFields = (body) => ({
 const createCustomer = async (req, res) => {
   try {
     const customerFields = pickCustomerFields(req.body);
+    const requestedOrganizationIds = Array.isArray(req.body.organizationIds)
+      ? req.body.organizationIds.filter(Boolean)
+      : [];
 
     if (!customerFields.name) {
       return res.status(400).json({ message: "Customer name is required" });
     }
 
-    const customer = await Customer.create({
-      user: req.user._id,
-      ...customerFields,
-    });
+    const organizationIds =
+      requestedOrganizationIds.length > 0 ? requestedOrganizationIds : [req.organization._id];
 
-    res.status(201).json(customer);
+    if (!isPlatformOwner(req.user)) {
+      const memberships = await OrganizationMember.find({
+        user: req.user._id,
+        organization: { $in: organizationIds },
+        status: "active",
+      }).select("organization");
+
+      if (memberships.length !== organizationIds.length) {
+        return res.status(403).json({ message: "You do not have access to one or more selected companies" });
+      }
+    }
+
+    const customers = await Customer.insertMany(
+      organizationIds.map((organizationId) => ({
+        user: req.user._id,
+        organization: organizationId,
+        ...customerFields,
+      }))
+    );
+
+    res.status(201).json(customers.length === 1 ? customers[0] : customers);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -35,7 +60,7 @@ const createCustomer = async (req, res) => {
 const getCustomers = async (req, res) => {
   try {
     const customers = await Customer.find({
-      user: req.user._id,
+      organization: req.organization._id,
       isDeleted: { $ne: true },
     }).sort({ createdAt: -1 });
 
@@ -49,7 +74,7 @@ const getCustomerById = async (req, res) => {
   try {
     const customer = await Customer.findOne({
       _id: req.params.id,
-      user: req.user._id,
+      organization: req.organization._id,
       isDeleted: { $ne: true },
     });
 
@@ -66,7 +91,7 @@ const getCustomerById = async (req, res) => {
 const updateCustomer = async (req, res) => {
   try {
     const customer = await Customer.findOneAndUpdate(
-      { _id: req.params.id, user: req.user._id, isDeleted: { $ne: true } },
+      { _id: req.params.id, organization: req.organization._id, isDeleted: { $ne: true } },
       pickCustomerFields(req.body),
       { new: true, runValidators: true }
     );
@@ -86,7 +111,7 @@ const deleteCustomer = async (req, res) => {
     const customer = await Customer.findOneAndUpdate(
       {
         _id: req.params.id,
-        user: req.user._id,
+        organization: req.organization._id,
         isDeleted: { $ne: true },
       },
       {
@@ -106,10 +131,10 @@ const deleteCustomer = async (req, res) => {
     };
 
     await Promise.all([
-      Receipt.updateMany({ customer: customer._id, user: req.user._id }, softDelete),
-      Payment.updateMany({ customer: customer._id, user: req.user._id }, softDelete),
-      Invoice.updateMany({ customer: customer._id, user: req.user._id }, softDelete),
-      Quote.updateMany({ customer: customer._id, user: req.user._id }, softDelete),
+      Receipt.updateMany({ customer: customer._id, organization: req.organization._id }, softDelete),
+      Payment.updateMany({ customer: customer._id, organization: req.organization._id }, softDelete),
+      Invoice.updateMany({ customer: customer._id, organization: req.organization._id }, softDelete),
+      Quote.updateMany({ customer: customer._id, organization: req.organization._id }, softDelete),
     ]);
 
     res.json({ message: "Customer and related records deleted" });

@@ -17,7 +17,7 @@ const recordPayment = async (req, res) => {
 
     const invoice = await Invoice.findOne({
       _id: invoiceId,
-      user: req.user._id,
+      organization: req.organization._id,
       isDeleted: { $ne: true },
     });
 
@@ -56,7 +56,10 @@ const recordPayment = async (req, res) => {
 
 const getPayments = async (req, res) => {
   try {
-    const payments = await Payment.find({ user: req.user._id, isDeleted: { $ne: true } })
+    const payments = await Payment.find({
+      organization: req.organization._id,
+      isDeleted: { $ne: true },
+    })
       .populate("invoice")
       .populate("customer")
       .sort({ createdAt: -1 });
@@ -71,7 +74,7 @@ const getPaymentsByInvoice = async (req, res) => {
   try {
     const invoice = await Invoice.findOne({
       _id: req.params.invoiceId,
-      user: req.user._id,
+      organization: req.organization._id,
       isDeleted: { $ne: true },
     });
 
@@ -80,7 +83,7 @@ const getPaymentsByInvoice = async (req, res) => {
     }
 
     const payments = await Payment.find({
-      user: req.user._id,
+      organization: req.organization._id,
       invoice: req.params.invoiceId,
       isDeleted: { $ne: true },
     })
@@ -98,7 +101,7 @@ const getReceiptById = async (req, res) => {
   try {
     const receipt = await Receipt.findOne({
       _id: req.params.id,
-      user: req.user._id,
+      organization: req.organization._id,
       isDeleted: { $ne: true },
     })
       .populate("payment")
@@ -119,7 +122,7 @@ const getReceiptByPayment = async (req, res) => {
   try {
     const receipt = await Receipt.findOne({
       payment: req.params.paymentId,
-      user: req.user._id,
+      organization: req.organization._id,
       isDeleted: { $ne: true },
     })
       .populate("payment")
