@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Building2,
@@ -23,6 +23,7 @@ type OrganizationRow = {
   email?: string;
   phone?: string;
   address?: string;
+  logoUrl?: string;
   currency: Currency;
   status: OrganizationStatus;
   createdAt?: string;
@@ -47,6 +48,7 @@ type CompanyForm = {
   email: string;
   phone: string;
   address: string;
+  logoUrl: string;
   currency: Currency;
   status: OrganizationStatus;
 };
@@ -59,6 +61,7 @@ const emptyCompanyForm: CompanyForm = {
   email: "",
   phone: "",
   address: "",
+  logoUrl: "",
   currency: "GBP",
   status: "active",
 };
@@ -95,8 +98,10 @@ export default function SuperAdminCompaniesPage() {
   const [checkingAccess, setCheckingAccess] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [formSaving, setFormSaving] = useState(false);
+  const [logoDragActive, setLogoDragActive] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const logoInputRef = useRef<HTMLInputElement | null>(null);
 
   const loadOrganizations = async () => {
     setLoading(true);
@@ -170,6 +175,7 @@ export default function SuperAdminCompaniesPage() {
       email: organization.email || "",
       phone: organization.phone || "",
       address: organization.address || "",
+      logoUrl: organization.logoUrl || "",
       currency: organization.currency,
       status: organization.status,
     });
@@ -191,6 +197,31 @@ export default function SuperAdminCompaniesPage() {
     }));
   };
 
+  const handleLogoFile = (file?: File) => {
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setError("Please select an image file for the logo.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setCompanyForm((current) => ({
+        ...current,
+        logoUrl: String(reader.result || ""),
+      }));
+      setError("");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleLogoDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setLogoDragActive(false);
+    handleLogoFile(event.dataTransfer.files[0]);
+  };
+
   const handleCompanySubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -209,6 +240,7 @@ export default function SuperAdminCompaniesPage() {
       email: companyForm.email.trim(),
       phone: companyForm.phone.trim(),
       address: companyForm.address.trim(),
+      logoUrl: companyForm.logoUrl.trim(),
     };
 
     try {
@@ -447,6 +479,77 @@ export default function SuperAdminCompaniesPage() {
               </select>
             </label>
 
+            <div className="space-y-2">
+              <span className="text-sm font-bold uppercase tracking-wide text-slate-300">
+                Logo
+              </span>
+              <div
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setLogoDragActive(true);
+                }}
+                onDragLeave={() => setLogoDragActive(false)}
+                onDrop={handleLogoDrop}
+                className={`rounded-xl border border-dashed p-4 transition ${
+                  logoDragActive
+                    ? "border-blue-400 bg-blue-500/10"
+                    : "border-slate-700 bg-slate-950"
+                }`}
+              >
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                  <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-800">
+                    {companyForm.logoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={companyForm.logoUrl}
+                        alt="Company logo preview"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                        Logo
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-white">
+                      Drag and drop an image here
+                    </p>
+                    <p className="mt-1 text-sm text-slate-400">
+                      Or select an image from your system.
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => logoInputRef.current?.click()}
+                        className="cursor-pointer rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500"
+                      >
+                        Select Image
+                      </button>
+                      {companyForm.logoUrl && (
+                        <button
+                          type="button"
+                          onClick={() => handleCompanyFormChange("logoUrl", "")}
+                          className="cursor-pointer rounded-lg border border-slate-600 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-slate-800"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <input
+                  ref={logoInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={(event) => handleLogoFile(event.target.files?.[0])}
+                  className="hidden"
+                />
+              </div>
+            </div>
+
             <label className="space-y-2 md:col-span-2">
               <span className="text-sm font-bold uppercase tracking-wide text-slate-300">
                 Address
@@ -521,8 +624,24 @@ export default function SuperAdminCompaniesPage() {
                 filteredOrganizations.map((organization) => (
                   <tr key={organization._id} className="bg-slate-800 text-white">
                     <td className="rounded-l-xl px-4 py-4">
-                      <p className="font-bold">{organization.name}</p>
-                      <p className="text-sm text-slate-300">{organization.slug}</p>
+                      <div className="flex items-center gap-3">
+                        {organization.logoUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={organization.logoUrl}
+                            alt={`${organization.name} logo`}
+                            className="h-10 w-10 rounded-lg object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 text-sm font-bold">
+                            {organization.name.slice(0, 2).toUpperCase()}
+                          </div>
+                        )}
+                        <div>
+                          <p className="font-bold">{organization.name}</p>
+                          <p className="text-sm text-slate-300">{organization.slug}</p>
+                        </div>
+                      </div>
                     </td>
                     <td className="px-4 py-4 text-sm text-slate-200">
                       <p>{organization.email || "No email"}</p>

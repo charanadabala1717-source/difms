@@ -352,7 +352,9 @@ const sendReceiptEmail = async (req, res) => {
       "Brent labs Accounts Department, London, United Kingdom";
     const companyEmail = req.organization?.email || process.env.COMPANY_EMAIL || process.env.MAIL_FROM || "";
 
-    const logoHtml = hasLogoFile
+    const logoHtml = req.organization?.logoUrl
+      ? `<img src="${req.organization.logoUrl}" alt="${companyName}" style="height:56px;width:56px;object-fit:cover;border-radius:10px;display:block;" />`
+      : hasLogoFile
       ? `<img src="cid:receipt-logo" alt="${companyName}" style="height:56px;width:56px;object-fit:cover;border-radius:10px;display:block;" />`
       : `<div style="height:56px;width:56px;border-radius:10px;background:#2563eb;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;">${companyName
           .slice(0, 2)

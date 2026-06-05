@@ -52,6 +52,18 @@ const formatServiceRows = (items = [], currency) => {
     .join("");
 };
 
+const getCompanyLogoHtml = (company) => {
+  const companyName = company?.name || "Brent labs";
+
+  if (company?.logoUrl) {
+    return `<img src="${company.logoUrl}" alt="${companyName}" style="height:48px;width:48px;object-fit:cover;border-radius:10px;display:block;" />`;
+  }
+
+  return `<div style="height:48px;width:48px;border-radius:10px;background:#2563eb;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;">${companyName
+    .slice(0, 2)
+    .toUpperCase()}</div>`;
+};
+
 const createInvoiceFromQuote = async (quote, dueDate) => {
   const existingInvoice = await Invoice.findOne({
     quote: quote._id,
@@ -132,6 +144,10 @@ const sendQuoteEmail = async (quote) => {
     subject: `Quote ${populatedQuote.quoteNumber} from ${companyName}`,
     html: `
       <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
+          ${getCompanyLogoHtml(company)}
+          <strong style="font-size:20px;">${companyName}</strong>
+        </div>
         <h2>Quote ${populatedQuote.quoteNumber}</h2>
         <p>Hello ${customer.name},</p>
         <p>Please review your quote details below.</p>
@@ -204,6 +220,10 @@ const sendPaymentEmail = async (invoice) => {
     subject: `Payment request from ${companyName} for invoice ${populatedInvoice.invoiceNumber}`,
     html: `
       <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
+          ${getCompanyLogoHtml(company)}
+          <strong style="font-size:20px;">${companyName}</strong>
+        </div>
         <h2>Invoice ${populatedInvoice.invoiceNumber}</h2>
         <p>Hello ${customer.name},</p>
         <p>Your quote has been accepted and an invoice has been generated.</p>

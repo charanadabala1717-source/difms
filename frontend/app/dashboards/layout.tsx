@@ -28,6 +28,7 @@ type AuthUser = {
   role?: string;
   activeOrganization?: {
     name?: string;
+    logoUrl?: string;
   } | null;
 };
 
@@ -36,6 +37,40 @@ const allPageNames = [
   { name: "Companies", path: "/dashboards/super-admin/companies" },
   { name: "Make Super Admin", path: "/dashboards/super-admin/make-super-admin" },
 ];
+
+function LogoMark({
+  src,
+  alt,
+  size,
+}: {
+  src?: string;
+  alt: string;
+  size: number;
+}) {
+  if (src) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={src}
+        alt={alt}
+        width={size}
+        height={size}
+        className="rounded-md object-contain"
+      />
+    );
+  }
+
+  return (
+    <Image
+      src="/images/intern.jpg"
+      alt={alt}
+      width={size}
+      height={size}
+      className="h-auto w-auto rounded-md object-contain"
+      priority
+    />
+  );
+}
 
 export default function DashboardLayout({
   children,
@@ -46,6 +81,7 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [companyName, setCompanyName] = useState("Company");
+  const [companyLogoUrl, setCompanyLogoUrl] = useState("");
 
   useEffect(() => {
     const token = getToken();
@@ -60,6 +96,7 @@ export default function DashboardLayout({
         const user = await apiRequest<AuthUser>("/auth/me");
         setAuthSession(token, user);
         setCompanyName(user.activeOrganization?.name || "Company");
+        setCompanyLogoUrl(user.activeOrganization?.logoUrl || "");
       } catch {
         clearAuthSession();
         router.push("/");
@@ -93,13 +130,10 @@ export default function DashboardLayout({
       {/* MOBILE TOP BAR */}
       <header className="sticky top-0 z-40 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 shadow-sm lg:hidden">
         <div className="flex items-center gap-3">
-          <Image
-            src="/images/intern.jpg"
+          <LogoMark
+            src={companyLogoUrl}
             alt={`${companyName} Logo`}
-            width={42}
-            height={42}
-            className="h-auto w-auto rounded-md object-contain"
-            priority
+            size={42}
           />
           <div>
             <h1 className="text-sm font-bold text-slate-900">{companyName}</h1>
@@ -122,13 +156,10 @@ export default function DashboardLayout({
         <aside className="hidden w-72 shrink-0 flex-col bg-gradient-to-b from-slate-600 to-slate-900 text-white shadow-xl lg:flex">
           <div className="border-b border-slate-700 px-5 py-6">
             <div className="flex items-center gap-4">
-              <Image
-                src="/images/intern.jpg"
+              <LogoMark
+                src={companyLogoUrl}
                 alt={`${companyName} Logo`}
-                width={70}
-                height={70}
-                className="h-auto w-auto rounded-md object-contain"
-                priority
+                size={70}
               />
               <div>
                 <h1 className="text-xl font-bold tracking-wide">{companyName}</h1>
@@ -180,13 +211,10 @@ export default function DashboardLayout({
             <aside className="fixed left-0 top-0 z-50 flex h-full w-72 max-w-[85vw] flex-col bg-gradient-to-b from-slate-600 to-slate-900 text-white shadow-2xl lg:hidden">
               <div className="flex items-center justify-between border-b border-slate-700 px-5 py-5">
                 <div className="flex items-center gap-3">
-                  <Image
-                    src="/images/intern.jpg"
+                  <LogoMark
+                    src={companyLogoUrl}
                     alt={`${companyName} Logo`}
-                    width={52}
-                    height={52}
-                    className="h-auto w-auto rounded-md object-contain"
-                    priority
+                    size={52}
                   />
                   <div>
                     <h1 className="text-lg font-bold tracking-wide">{companyName}</h1>

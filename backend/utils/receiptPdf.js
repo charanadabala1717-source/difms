@@ -19,6 +19,32 @@ const getCompanyAddress = (company) =>
 const getCompanyEmail = (company) => company?.email || process.env.COMPANY_EMAIL || process.env.MAIL_FROM || "";
 const defaultLogoPath = () => path.join(__dirname, "..", "assets", "intern.jpg");
 
+const resolveLogoSource = async (company, fallbackLogoPath) => {
+  const logoUrl = company?.logoUrl;
+
+  if (logoUrl?.startsWith("data:image/")) {
+    const base64 = logoUrl.split(",")[1];
+    return base64 ? Buffer.from(base64, "base64") : fallbackLogoPath;
+  }
+
+  if (logoUrl?.startsWith("http://") || logoUrl?.startsWith("https://")) {
+    try {
+      const response = await fetch(logoUrl);
+      if (response.ok) {
+        return Buffer.from(await response.arrayBuffer());
+      }
+    } catch {
+      return fallbackLogoPath;
+    }
+  }
+
+  if (logoUrl && fs.existsSync(logoUrl)) {
+    return logoUrl;
+  }
+
+  return fallbackLogoPath;
+};
+
 const formatStatus = (invoice) => {
   const total = Number(invoice.total) || 0;
   const amountPaid = Number(invoice.amountPaid) || 0;
@@ -46,7 +72,10 @@ const addRow = (doc, label, value, y) => {
 
 const drawHeader = (doc, subtitle, logoPath) => {
   doc.rect(0, 0, 595, 120).fill("#0f172a");
-  if (logoPath && fs.existsSync(logoPath)) {
+  const canRenderLogo =
+    Buffer.isBuffer(logoPath) || (typeof logoPath === "string" && fs.existsSync(logoPath));
+
+  if (canRenderLogo) {
     doc.save();
     doc.roundedRect(50, 35, 54, 54, 8).clip();
     doc.image(logoPath, 50, 35, { width: 54, height: 54 });
@@ -110,17 +139,19 @@ const generateInvoicePdf = ({
   company,
 }) => {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: "A4", margin: 50 });
-    const chunks = [];
-    const documentNumber = numberValue || invoice.invoiceNumber;
+    resolveLogoSource(company, logoPath)
+      .then((resolvedLogoPath) => {
+        const doc = new PDFDocument({ size: "A4", margin: 50 });
+        const chunks = [];
+        const documentNumber = numberValue || invoice.invoiceNumber;
 
-    doc.on("data", (chunk) => chunks.push(chunk));
-    doc.on("end", () => resolve(Buffer.concat(chunks)));
-    doc.on("error", reject);
+        doc.on("data", (chunk) => chunks.push(chunk));
+        doc.on("end", () => resolve(Buffer.concat(chunks)));
+        doc.on("error", reject);
 
-    doc.company = company;
-    drawHeader(doc, documentSubtitle, logoPath);
-    doc.invoiceCurrency = invoice.currency;
+        doc.company = company;
+        drawHeader(doc, documentSubtitle, resolvedLogoPath);
+        doc.invoiceCurrency = invoice.currency;
 
     doc.fillColor("#0f172a").font("Helvetica-Bold").fontSize(20).text(documentTitle, 50, 150);
     doc
@@ -156,22 +187,26 @@ const generateInvoicePdf = ({
     drawItemsTable(doc, invoice.items, 555);
     drawFooter(doc, "Thank you for your business.");
 
-    doc.end();
+        doc.end();
+      })
+      .catch(reject);
   });
 };
 
 const generateReceiptPdf = ({ receipt, invoice, customer, logoPath = defaultLogoPath(), company }) => {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: "A4", margin: 50 });
-    const chunks = [];
+    resolveLogoSource(company, logoPath)
+      .then((resolvedLogoPath) => {
+        const doc = new PDFDocument({ size: "A4", margin: 50 });
+        const chunks = [];
 
-    doc.on("data", (chunk) => chunks.push(chunk));
-    doc.on("end", () => resolve(Buffer.concat(chunks)));
-    doc.on("error", reject);
+        doc.on("data", (chunk) => chunks.push(chunk));
+        doc.on("end", () => resolve(Buffer.concat(chunks)));
+        doc.on("error", reject);
 
-    doc.company = company;
-    drawHeader(doc, "Official Payment Receipt", logoPath);
-    doc.invoiceCurrency = invoice.currency;
+        doc.company = company;
+        drawHeader(doc, "Official Payment Receipt", resolvedLogoPath);
+        doc.invoiceCurrency = invoice.currency;
 
     doc.fillColor("#0f172a").font("Helvetica-Bold").fontSize(20).text("Receipt", 50, 150);
     doc
@@ -208,7 +243,9 @@ const generateReceiptPdf = ({ receipt, invoice, customer, logoPath = defaultLogo
     drawItemsTable(doc, invoice.items, 555);
     drawFooter(doc, "Thank you for your payment.");
 
-    doc.end();
+        doc.end();
+      })
+      .catch(reject);
   });
 };
 

@@ -61,6 +61,7 @@ const serializeOrganizationRow = async (organization) => {
     email: organization.email,
     phone: organization.phone,
     address: organization.address,
+    logoUrl: organization.logoUrl,
     currency: organization.currency,
     status: organization.status,
     createdAt: organization.createdAt,
@@ -99,7 +100,7 @@ const getOrganizations = async (req, res) => {
 
 const createOrganization = async (req, res) => {
   try {
-    const { name, email, phone, address, currency, status } = req.body;
+    const { name, email, phone, address, logoUrl, currency, status } = req.body;
 
     if (!name?.trim()) {
       return res.status(400).json({ message: "Company name is required" });
@@ -115,6 +116,7 @@ const createOrganization = async (req, res) => {
       email: email?.trim(),
       phone: phone?.trim(),
       address: address?.trim(),
+      logoUrl: logoUrl?.trim(),
       currency: normalizeCurrency(currency),
       status: status || "active",
       createdBy: req.user._id,
@@ -160,6 +162,10 @@ const updateOrganization = async (req, res) => {
 
     if (req.body.address !== undefined) {
       updates.address = req.body.address?.trim();
+    }
+
+    if (req.body.logoUrl !== undefined) {
+      updates.logoUrl = req.body.logoUrl?.trim();
     }
 
     if (req.body.status) {
