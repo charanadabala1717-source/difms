@@ -5,6 +5,7 @@ const {
   getMe,
   updateMe,
   promoteSuperAdmin,
+  getRegistrationOrganizations,
 } = require("../controllers/authController");
 const { protect } = require("../middleware/authMiddleware");
 
@@ -12,6 +13,7 @@ const router = express.Router();
 
 router.post("/register", registerUser);
 router.post("/login", loginUser);
+router.get("/organizations", getRegistrationOrganizations);
 router.get("/me", protect, getMe);
 router.patch("/me", protect, updateMe);
 router.post("/promote-super-admin", protect, promoteSuperAdmin);

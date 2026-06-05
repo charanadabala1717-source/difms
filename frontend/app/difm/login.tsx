@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { apiRequest, setAuthSession } from "../difm/lib/api";
@@ -12,10 +12,19 @@ type AuthResponse = {
   email: string;
   role: string;
   token: string;
+  organizations?: unknown[];
+  activeOrganization?: unknown;
+};
+
+type OrganizationOption = {
+  _id: string;
+  name: string;
 };
 
 export default function Login() {
   const [name, setName] = useState("");
+  const [organizationId, setOrganizationId] = useState("");
+  const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
@@ -23,6 +32,24 @@ export default function Login() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    if (authMode !== "register") return;
+
+    const loadOrganizations = async () => {
+      try {
+        const data = await apiRequest<OrganizationOption[]>("/auth/organizations", {
+          skipAuth: true,
+        });
+        setOrganizations(data);
+        setOrganizationId((current) => current || data[0]?._id || "");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load companies");
+      }
+    };
+
+    loadOrganizations();
+  }, [authMode]);
   
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -35,7 +62,7 @@ export default function Login() {
       const body =
         authMode === "login"
           ? { email, password }
-          : { name, email, password };
+          : { name, organizationId, email, password };
 
       const user = await apiRequest<AuthResponse>(endpoint, {
         method: "POST",
@@ -43,12 +70,7 @@ export default function Login() {
         skipAuth: true,
       });
 
-      setAuthSession(user.token, {
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-      });
+      setAuthSession(user.token, user);
       router.push("/dashboards/overview");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed");
@@ -83,19 +105,43 @@ export default function Login() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {authMode === "register" && (
-              <div>
-                <label className="mb-2 block text-lg font-medium text-white/90">
-                  Name
-                </label>
-                <input
-                  type="text"
-                  placeholder="Enter your name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full rounded-xl border border-white/20 bg-white/90 px-4 py-3 text-lg text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-400"
-                  required
-                />
-              </div>
+              <>
+                <div>
+                  <label className="mb-2 block text-lg font-medium text-white/90">
+                    Name
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Enter your name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full rounded-xl border border-white/20 bg-white/90 px-4 py-3 text-lg text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-400"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-lg font-medium text-white/90">
+                    Company
+                  </label>
+                  <select
+                    value={organizationId}
+                    onChange={(e) => setOrganizationId(e.target.value)}
+                    className="w-full rounded-xl border border-white/20 bg-white/90 px-4 py-3 text-lg text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-400"
+                    required
+                  >
+                    {organizations.length > 0 ? (
+                      organizations.map((organization) => (
+                        <option key={organization._id} value={organization._id}>
+                          {organization.name}
+                        </option>
+                      ))
+                    ) : (
+                      <option value="">No companies available</option>
+                    )}
+                  </select>
+                </div>
+              </>
             )}
 
             <div>
@@ -160,6 +206,8 @@ export default function Login() {
               type="button"
               onClick={() => {
                 setAuthMode((prev) => (prev === "login" ? "register" : "login"));
+                setName("");
+                setOrganizationId("");
                 setError("");
               }}
               className="w-full cursor-pointer text-sm font-medium text-blue-100 underline underline-offset-4 hover:text-white"

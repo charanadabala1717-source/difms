@@ -1,6 +1,7 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+const Organization = require("../models/Organization");
 const OrganizationMember = require("../models/OrganizationMember");
 const { normalizeCurrency } = require("../utils/currency");
 const {
@@ -51,10 +52,10 @@ const buildAuthResponse = async (user, token) => {
 
 const registerUser = async (req, res) => {
   try {
-    const { name, email, password, companyName, currency } = req.body;
+    const { name, email, password, organizationId, currency } = req.body;
 
-    if (!name || !email || !password) {
-      return res.status(400).json({ message: "Name, email, and password are required" });
+    if (!name || !email || !password || !organizationId) {
+      return res.status(400).json({ message: "Name, email, password, and company are required" });
     }
 
     if (password.length < 6) {
@@ -67,6 +68,15 @@ const registerUser = async (req, res) => {
       return res.status(400).json({ message: "User already exists with this email" });
     }
 
+    const organization = await Organization.findOne({
+      _id: organizationId,
+      status: "active",
+    });
+
+    if (!organization) {
+      return res.status(404).json({ message: "Selected company was not found" });
+    }
+
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
@@ -77,10 +87,11 @@ const registerUser = async (req, res) => {
       currency: normalizeCurrency(currency),
     });
 
-    await createOrganizationForUser({
-      user,
-      companyName: companyName || `${name}'s Company`,
-      currency: user.currency,
+    await OrganizationMember.create({
+      organization: organization._id,
+      user: user._id,
+      role: "staff",
+      status: "active",
     });
 
     res.status(201).json(await buildAuthResponse(user, generateToken(user._id)));
@@ -128,6 +139,18 @@ const getMe = async (req, res) => {
       ? serializeOrganization(req.organization, req.membership)
       : null,
   });
+};
+
+const getRegistrationOrganizations = async (req, res) => {
+  try {
+    const organizations = await Organization.find({ status: "active" })
+      .select("name")
+      .sort({ name: 1 });
+
+    res.json(organizations);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 };
 
 const updateMe = async (req, res) => {
@@ -243,4 +266,11 @@ const promoteSuperAdmin = async (req, res) => {
   }
 };
 
-module.exports = { registerUser, loginUser, getMe, updateMe, promoteSuperAdmin };
+module.exports = {
+  registerUser,
+  loginUser,
+  getMe,
+  updateMe,
+  promoteSuperAdmin,
+  getRegistrationOrganizations,
+};
