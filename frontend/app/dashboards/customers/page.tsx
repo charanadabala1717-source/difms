@@ -25,19 +25,7 @@ type CustomerResponse = {
   address?: string;
 };
 
-type OrganizationOption = {
-  _id: string;
-  name: string;
-};
-
-type UserResponse = {
-  email?: string;
-  role?: string;
-  organizations?: OrganizationOption[];
-  activeOrganization?: OrganizationOption | null;
-};
-
-const platformOwnerEmail = process.env.NEXT_PUBLIC_SUPER_ADMIN_CREATOR_EMAIL;
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const emptyForm = {
   name: "",
@@ -308,8 +296,6 @@ export default function CustomersPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null);
   const [formData, setFormData] = useState(emptyForm);
-  const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
-  const [selectedOrganizationIds, setSelectedOrganizationIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [countrySearch, setCountrySearch] = useState("");
@@ -344,32 +330,9 @@ export default function CustomersPage() {
     }
   }, []);
 
-  const loadUserOrganizations = useCallback(async () => {
-    try {
-      const user = await apiRequest<UserResponse>("/auth/me");
-      const userOrganizations =
-        platformOwnerEmail && user.email === platformOwnerEmail && user.role === "super_admin"
-          ? await apiRequest<OrganizationOption[]>("/admin/organizations")
-          : user.organizations || [];
-
-      setOrganizations(userOrganizations);
-      setSelectedOrganizationIds(
-        user.activeOrganization?._id
-          ? [user.activeOrganization._id]
-          : userOrganizations[0]?._id
-          ? [userOrganizations[0]._id]
-          : []
-      );
-    } catch {
-      setOrganizations([]);
-      setSelectedOrganizationIds([]);
-    }
-  }, []);
-
   useEffect(() => {
     loadCustomers();
-    loadUserOrganizations();
-  }, [loadCustomers, loadUserOrganizations]);
+  }, [loadCustomers]);
 
   const filteredCustomers = useMemo(() => {
     const query = searchTerm.toLowerCase();
@@ -403,13 +366,6 @@ export default function CustomersPage() {
   const openAddModal = () => {
     setEditingCustomerId(null);
     setFormData(emptyForm);
-    setSelectedOrganizationIds((current) =>
-      current.length > 0
-        ? current
-        : organizations[0]?._id
-        ? [organizations[0]._id]
-        : []
-    );
     setCountrySearch("");
     setIsCountryDropdownOpen(false);
     setIsModalOpen(true);
@@ -450,29 +406,31 @@ export default function CustomersPage() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleOrganizationToggle = (organizationId: string) => {
-    setSelectedOrganizationIds((current) =>
-      current.includes(organizationId)
-        ? current.filter((id) => id !== organizationId)
-        : [...current, organizationId]
-    );
-  };
-
-  const handleAllOrganizationsToggle = () => {
-    setSelectedOrganizationIds((current) =>
-      current.length === organizations.length ? [] : organizations.map((organization) => organization._id)
-    );
-  };
-
   const handleSave = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!formData.name.trim() || !formData.email.trim() || !formData.phoneNumber.trim()) {
+    if (!formData.name.trim()) {
+      setError("Customer name is required");
       return;
     }
 
-    if (!editingCustomerId && selectedOrganizationIds.length === 0) {
-      setError("Please select at least one company for this customer");
+    if (!formData.email.trim()) {
+      setError("Customer email is required");
+      return;
+    }
+
+    if (!emailPattern.test(formData.email.trim())) {
+      setError("Please enter a valid customer email");
+      return;
+    }
+
+    if (!formData.phoneNumber.trim()) {
+      setError("Customer phone number is required");
+      return;
+    }
+
+    if (!formData.address.trim()) {
+      setError("Customer address is required");
       return;
     }
 
@@ -485,7 +443,6 @@ export default function CustomersPage() {
         phone: `${formData.countryCode} ${formData.phoneNumber.trim()}`,
         phoneNumber: formData.phoneNumber.trim(),
         address: formData.address.trim(),
-        ...(!editingCustomerId ? { organizationIds: selectedOrganizationIds } : {}),
       };
 
       if (editingCustomerId) {
@@ -527,8 +484,8 @@ export default function CustomersPage() {
           </p>
         </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row lg:items-center">
-          <div className="relative w-full sm:w-auto">
+        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center lg:items-center">
+          <div className="relative w-full min-w-0 sm:flex-1 lg:max-w-sm">
             <Search
               size={18}
               className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
@@ -538,7 +495,7 @@ export default function CustomersPage() {
               placeholder="Search customers..."
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
-              className="w-full rounded-xl border border-slate-700 bg-slate-800 py-3 pl-10 pr-4 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-blue-500 sm:w-72"
+              className="w-full rounded-xl border border-slate-700 bg-slate-800 py-3 pl-10 pr-4 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-blue-500"
             />
           </div>
 
@@ -567,7 +524,7 @@ export default function CustomersPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-max border-separate border-spacing-y-3">
+          <table className="w-full min-w-full border-separate border-spacing-y-3">
             <thead>
               <tr>
                 {["Customer ID", "Name", "Email", "Phone", "Address", "Actions"].map(
@@ -602,10 +559,10 @@ export default function CustomersPage() {
                     <td className="rounded-l-xl px-4 py-4 text-sm font-medium text-slate-100">
                       {customer.customerId}
                     </td>
-                    <td className="px-4 py-4 text-sm text-slate-200">{customer.name}</td>
-                    <td className="px-4 py-4 text-sm text-slate-200">{customer.email}</td>
+                    <td className="break-words px-4 py-4 text-sm text-slate-200">{customer.name}</td>
+                    <td className="break-words px-4 py-4 text-sm text-slate-200">{customer.email}</td>
                     <td className="px-4 py-4 text-sm text-slate-200">{customer.phone}</td>
-                    <td className="px-4 py-4 text-sm text-slate-200">
+                    <td className="break-words px-4 py-4 text-sm text-slate-200">
                       {customer.address || "-"}
                     </td>
                     <td className="rounded-r-xl px-4 py-4">
@@ -669,42 +626,6 @@ export default function CustomersPage() {
             </div>
 
             <form onSubmit={handleSave} className="space-y-4">
-              {!editingCustomerId && organizations.length > 1 && (
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-300">
-                    Company
-                  </label>
-                  <div className="rounded-xl border border-slate-700 bg-slate-800 p-3">
-                    <label className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 text-sm text-slate-200 transition hover:bg-slate-700/60">
-                      <input
-                        type="checkbox"
-                        checked={selectedOrganizationIds.length === organizations.length}
-                        onChange={handleAllOrganizationsToggle}
-                        className="h-4 w-4 accent-blue-600"
-                      />
-                      <span>All companies</span>
-                    </label>
-
-                    <div className="mt-2 max-h-40 space-y-1 overflow-y-auto border-t border-slate-700 pt-2">
-                      {organizations.map((organization) => (
-                        <label
-                          key={organization._id}
-                          className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 text-sm text-slate-200 transition hover:bg-slate-700/60"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedOrganizationIds.includes(organization._id)}
-                            onChange={() => handleOrganizationToggle(organization._id)}
-                            className="h-4 w-4 accent-blue-600"
-                          />
-                          <span>{organization.name}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-300">
                   Name
@@ -817,10 +738,11 @@ export default function CustomersPage() {
                   placeholder="Enter customer address"
                   rows={3}
                   className="w-full resize-none rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-blue-500"
+                  required
                 />
               </div>
 
-              <div className="flex gap-3 pt-2">
+              <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row">
                 <button
                   type="button"
                   onClick={closeModal}

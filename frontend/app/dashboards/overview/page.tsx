@@ -437,7 +437,7 @@ export default function OverviewPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-max border-separate border-spacing-y-3">
+          <table className="w-full min-w-full border-separate border-spacing-y-3">
             <thead>
               <tr>
                 <th className="px-4 text-left text-sm font-semibold text-slate-400">
@@ -462,7 +462,7 @@ export default function OverviewPage() {
                   <td className="rounded-l-xl px-4 py-3 text-sm font-medium text-slate-100">
                     {transaction.id}
                   </td>
-                  <td className="px-4 py-3 text-sm text-slate-200">
+                  <td className="break-words px-4 py-3 text-sm text-slate-200">
                     {transaction.customer}
                   </td>
                   <td className="px-4 py-3 text-sm font-semibold text-white">

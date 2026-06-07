@@ -11,6 +11,23 @@ const { createUniqueSlug } = require("../utils/organization");
 const allowedStatuses = ["active", "inactive", "suspended"];
 const platformOwnerEmail = () => process.env.SUPER_ADMIN_CREATOR_EMAIL;
 const isPlatformOwner = (user) => platformOwnerEmail() && user.email === platformOwnerEmail();
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const findOrganizationByEmail = (email, excludedOrganizationId) => {
+  if (!email) return null;
+
+  const query = {
+    email: new RegExp(`^${escapeRegex(email)}$`, "i"),
+  };
+
+  if (excludedOrganizationId) {
+    query._id = { $ne: excludedOrganizationId };
+  }
+
+  return Organization.findOne(query);
+};
 
 const getAccessibleOrganizationIds = async (userId) => {
   const memberships = await OrganizationMember.find({
@@ -63,6 +80,8 @@ const serializeOrganizationRow = async (organization) => {
     address: organization.address,
     logoUrl: organization.logoUrl,
     currency: organization.currency,
+    taxPercentage: organization.taxPercentage || 0,
+    discountPercentage: organization.discountPercentage || 0,
     status: organization.status,
     createdAt: organization.createdAt,
     owner: ownerMembership?.user
@@ -102,8 +121,26 @@ const createOrganization = async (req, res) => {
   try {
     const { name, email, phone, address, logoUrl, currency, status } = req.body;
 
+    if (!isPlatformOwner(req.user)) {
+      return res.status(403).json({ message: "Only the platform owner can add companies" });
+    }
+
     if (!name?.trim()) {
       return res.status(400).json({ message: "Company name is required" });
+    }
+
+    const normalizedEmail = email?.trim().toLowerCase();
+
+    if (normalizedEmail && !emailPattern.test(normalizedEmail)) {
+      return res.status(400).json({ message: "Please enter a valid company email" });
+    }
+
+    if (normalizedEmail) {
+      const existingOrganization = await findOrganizationByEmail(normalizedEmail);
+
+      if (existingOrganization) {
+        return res.status(400).json({ message: "A company already exists with this email" });
+      }
     }
 
     if (status && !allowedStatuses.includes(status)) {
@@ -113,7 +150,7 @@ const createOrganization = async (req, res) => {
     const organization = await Organization.create({
       name: name.trim(),
       slug: await createUniqueSlug(name),
-      email: email?.trim(),
+      email: normalizedEmail,
       phone: phone?.trim(),
       address: address?.trim(),
       logoUrl: logoUrl?.trim(),
@@ -153,7 +190,21 @@ const updateOrganization = async (req, res) => {
     }
 
     if (req.body.email !== undefined) {
-      updates.email = req.body.email?.trim();
+      const normalizedEmail = req.body.email?.trim().toLowerCase();
+
+      if (normalizedEmail && !emailPattern.test(normalizedEmail)) {
+        return res.status(400).json({ message: "Please enter a valid company email" });
+      }
+
+      if (normalizedEmail) {
+        const existingOrganization = await findOrganizationByEmail(normalizedEmail, req.params.id);
+
+        if (existingOrganization) {
+          return res.status(400).json({ message: "A company already exists with this email" });
+        }
+      }
+
+      updates.email = normalizedEmail;
     }
 
     if (req.body.phone !== undefined) {

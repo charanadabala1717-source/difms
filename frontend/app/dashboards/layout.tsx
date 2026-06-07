@@ -29,6 +29,7 @@ type AuthUser = {
   activeOrganization?: {
     name?: string;
     logoUrl?: string;
+    role?: string;
   } | null;
 };
 
@@ -82,6 +83,7 @@ export default function DashboardLayout({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [companyName, setCompanyName] = useState("Company");
   const [companyLogoUrl, setCompanyLogoUrl] = useState("");
+  const [canViewSettings, setCanViewSettings] = useState(false);
 
   useEffect(() => {
     const token = getToken();
@@ -97,6 +99,12 @@ export default function DashboardLayout({
         setAuthSession(token, user);
         setCompanyName(user.activeOrganization?.name || "Company");
         setCompanyLogoUrl(user.activeOrganization?.logoUrl || "");
+        setCanViewSettings(
+          user.activeOrganization?.role === "owner" ||
+            user.activeOrganization?.role === "admin" ||
+            (Boolean(process.env.NEXT_PUBLIC_SUPER_ADMIN_CREATOR_EMAIL) &&
+              user.email === process.env.NEXT_PUBLIC_SUPER_ADMIN_CREATOR_EMAIL)
+        );
       } catch {
         clearAuthSession();
         router.push("/");
@@ -110,6 +118,11 @@ export default function DashboardLayout({
     const found = allPageNames.find((item) => item.path === pathname);
     return found?.name ?? "Dashboard";
   }, [pathname]);
+
+  const visibleNavItems = useMemo(
+    () => navItems.filter((item) => item.path !== "/dashboards/settings" || canViewSettings),
+    [canViewSettings]
+  );
 
   const handleNavigate = (path: string) => {
     router.push(path);
@@ -170,7 +183,7 @@ export default function DashboardLayout({
 
           <nav className="flex-1 px-4 py-6">
             <div className="space-y-3">
-              {navItems.map((item) => {
+              {visibleNavItems.map((item) => {
                 const isActive = pathname === item.path;
                 const Icon = item.icon;
 
@@ -234,7 +247,7 @@ export default function DashboardLayout({
 
               <nav className="flex-1 px-4 py-6">
                 <div className="space-y-3">
-                  {navItems.map((item) => {
+                  {visibleNavItems.map((item) => {
                     const isActive = pathname === item.path;
                     const Icon = item.icon;
 

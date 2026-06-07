@@ -35,6 +35,18 @@ const organizationSchema = new mongoose.Schema(
       enum: ["GBP", "ZMW"],
       default: "GBP",
     },
+    taxPercentage: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
+    discountPercentage: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
     status: {
       type: String,
       enum: ["active", "inactive", "suspended"],

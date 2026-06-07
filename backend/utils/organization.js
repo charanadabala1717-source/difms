@@ -33,6 +33,8 @@ const serializeOrganization = (organization, membership) => ({
   address: organization.address,
   logoUrl: organization.logoUrl,
   currency: organization.currency,
+  taxPercentage: organization.taxPercentage || 0,
+  discountPercentage: organization.discountPercentage || 0,
   status: organization.status,
   role: membership?.role,
   memberStatus: membership?.status,

@@ -7,29 +7,72 @@ const OrganizationMember = require("../models/OrganizationMember");
 
 const platformOwnerEmail = () => process.env.SUPER_ADMIN_CREATOR_EMAIL;
 const isPlatformOwner = (user) => platformOwnerEmail() && user.email === platformOwnerEmail();
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const pickCustomerFields = (body) => ({
-  name: body.name,
-  email: body.email,
-  phone: body.phone || body.phoneNumber,
-  countryCode: body.countryCode,
-  phoneNumber: body.phoneNumber || body.phone,
-  address: body.address,
+  name: body.name?.trim(),
+  email: body.email?.trim().toLowerCase(),
+  phone: (body.phone || body.phoneNumber)?.trim(),
+  countryCode: body.countryCode?.trim(),
+  phoneNumber: (body.phoneNumber || body.phone)?.trim(),
+  address: body.address?.trim(),
 });
+
+const validateCustomerFields = (customerFields) => {
+  if (!customerFields.name) {
+    return "Customer name is required";
+  }
+
+  if (!customerFields.email) {
+    return "Customer email is required";
+  }
+
+  if (!emailPattern.test(customerFields.email)) {
+    return "Please enter a valid customer email";
+  }
+
+  if (!customerFields.phoneNumber) {
+    return "Customer phone number is required";
+  }
+
+  if (!customerFields.address) {
+    return "Customer address is required";
+  }
+
+  return "";
+};
+
+const findDuplicateCustomer = (email, organizationIds, excludedCustomerId) => {
+  const query = {
+    organization: { $in: organizationIds },
+    email: new RegExp(`^${escapeRegex(email)}$`, "i"),
+    isDeleted: { $ne: true },
+  };
+
+  if (excludedCustomerId) {
+    query._id = { $ne: excludedCustomerId };
+  }
+
+  return Customer.findOne(query).populate("organization", "name");
+};
 
 const createCustomer = async (req, res) => {
   try {
     const customerFields = pickCustomerFields(req.body);
-    const requestedOrganizationIds = Array.isArray(req.body.organizationIds)
-      ? req.body.organizationIds.filter(Boolean)
-      : [];
 
-    if (!customerFields.name) {
-      return res.status(400).json({ message: "Customer name is required" });
+    const validationMessage = validateCustomerFields(customerFields);
+
+    if (validationMessage) {
+      return res.status(400).json({ message: validationMessage });
     }
 
-    const organizationIds =
-      requestedOrganizationIds.length > 0 ? requestedOrganizationIds : [req.organization._id];
+    if (!req.organization?._id) {
+      return res.status(400).json({ message: "Active company is required to create a customer" });
+    }
+
+    const organizationIds = [req.organization._id];
 
     if (!isPlatformOwner(req.user)) {
       const memberships = await OrganizationMember.find({
@@ -41,6 +84,15 @@ const createCustomer = async (req, res) => {
       if (memberships.length !== organizationIds.length) {
         return res.status(403).json({ message: "You do not have access to one or more selected companies" });
       }
+    }
+
+    const duplicateCustomer = await findDuplicateCustomer(customerFields.email, organizationIds);
+
+    if (duplicateCustomer) {
+      const companyName = duplicateCustomer.organization?.name || "the selected company";
+      return res.status(400).json({
+        message: `A customer already exists with this email in ${companyName}`,
+      });
     }
 
     const customers = await Customer.insertMany(
@@ -90,9 +142,28 @@ const getCustomerById = async (req, res) => {
 
 const updateCustomer = async (req, res) => {
   try {
+    const customerFields = pickCustomerFields(req.body);
+    const validationMessage = validateCustomerFields(customerFields);
+
+    if (validationMessage) {
+      return res.status(400).json({ message: validationMessage });
+    }
+
+    const duplicateCustomer = await findDuplicateCustomer(
+      customerFields.email,
+      [req.organization._id],
+      req.params.id
+    );
+
+    if (duplicateCustomer) {
+      return res.status(400).json({
+        message: "A customer already exists with this email in this company",
+      });
+    }
+
     const customer = await Customer.findOneAndUpdate(
       { _id: req.params.id, organization: req.organization._id, isDeleted: { $ne: true } },
-      pickCustomerFields(req.body),
+      customerFields,
       { new: true, runValidators: true }
     );
 

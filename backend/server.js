@@ -22,6 +22,7 @@ app.get("/", (req, res) => {
 
 app.use("/api/auth", require("./routes/authRoutes"));
 app.use("/api/admin", require("./routes/adminRoutes"));
+app.use("/api/organization", require("./routes/organizationRoutes"));
 app.use("/api/customers", require("./routes/customerRoutes"));
 app.use("/api/quotes", require("./routes/quoteRoutes"));
 app.use("/api/invoices", require("./routes/invoiceRoutes"));

@@ -14,7 +14,7 @@ const organizationMemberSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ["owner", "admin", "staff"],
+      enum: ["owner", "admin", "staff", "viewer"],
       default: "staff",
     },
     status: {

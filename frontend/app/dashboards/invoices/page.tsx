@@ -248,8 +248,8 @@ export default function InvoicesPage() {
           </p>
         </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row lg:items-center">
-          <div className="relative w-full sm:w-auto">
+        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center lg:items-center">
+          <div className="relative w-full min-w-0 sm:flex-1 lg:max-w-sm">
             <Search
               size={18}
               className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
@@ -259,7 +259,7 @@ export default function InvoicesPage() {
               placeholder="Search invoices..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full rounded-xl border border-slate-700 bg-slate-800 py-3 pl-10 pr-4 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-blue-500 sm:w-72"
+              className="w-full rounded-xl border border-slate-700 bg-slate-800 py-3 pl-10 pr-4 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-blue-500"
             />
           </div>
         </div>
@@ -286,7 +286,7 @@ export default function InvoicesPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-max border-separate border-spacing-y-3">
+          <table className="w-full min-w-full border-separate border-spacing-y-3">
             <thead>
               <tr>
                 <th className="px-4 text-left text-sm font-semibold text-slate-400">
@@ -326,7 +326,7 @@ export default function InvoicesPage() {
                     <td className="rounded-l-xl px-4 py-4 text-sm font-medium text-slate-100">
                       {invoice.invoiceId}
                     </td>
-                    <td className="px-4 py-4 text-sm text-slate-200">
+                    <td className="break-words px-4 py-4 text-sm text-slate-200">
                       {invoice.customerName}
                     </td>
                     <td className="px-4 py-4 text-sm font-semibold text-white">

@@ -40,6 +40,7 @@ type OrganizationRow = {
 };
 
 type AuthUser = {
+  email: string;
   role: string;
 };
 
@@ -90,6 +91,7 @@ const formatDate = (value?: string) => {
 export default function SuperAdminCompaniesPage() {
   const router = useRouter();
   const [organizations, setOrganizations] = useState<OrganizationRow[]>([]);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [search, setSearch] = useState("");
   const [companyForm, setCompanyForm] = useState<CompanyForm>(emptyCompanyForm);
   const [companyFormVisible, setCompanyFormVisible] = useState(false);
@@ -102,6 +104,9 @@ export default function SuperAdminCompaniesPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const logoInputRef = useRef<HTMLInputElement | null>(null);
+  const platformOwnerEmail = process.env.NEXT_PUBLIC_SUPER_ADMIN_CREATOR_EMAIL;
+  const isPlatformOwner =
+    Boolean(platformOwnerEmail) && currentUser?.email === platformOwnerEmail;
 
   const loadOrganizations = async () => {
     setLoading(true);
@@ -124,6 +129,7 @@ export default function SuperAdminCompaniesPage() {
 
       try {
         const user = await apiRequest<AuthUser>("/auth/me");
+        setCurrentUser(user);
 
         if (user.role !== "super_admin") {
           router.replace("/dashboards/overview");
@@ -161,6 +167,11 @@ export default function SuperAdminCompaniesPage() {
   }, [organizations, search]);
 
   const openAddCompanyForm = () => {
+    if (!isPlatformOwner) {
+      setError("Only the platform owner can add companies.");
+      return;
+    }
+
     setEditingCompany(null);
     setCompanyForm(emptyCompanyForm);
     setCompanyFormVisible(true);
@@ -227,6 +238,11 @@ export default function SuperAdminCompaniesPage() {
 
     if (!companyForm.name.trim()) {
       setError("Company name is required.");
+      return;
+    }
+
+    if (!editingCompany && !isPlatformOwner) {
+      setError("Only the platform owner can add companies.");
       return;
     }
 
@@ -364,14 +380,16 @@ export default function SuperAdminCompaniesPage() {
               className="w-full rounded-xl border border-slate-700 bg-slate-900/80 py-4 pl-12 pr-4 text-white outline-none transition focus:border-blue-400"
             />
           </div>
-          <button
-            type="button"
-            onClick={openAddCompanyForm}
-            className="inline-flex min-h-14 cursor-pointer items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 font-bold text-white shadow-lg transition hover:bg-blue-500"
-          >
-            <Plus size={20} />
-            Add Company
-          </button>
+          {isPlatformOwner && (
+            <button
+              type="button"
+              onClick={openAddCompanyForm}
+              className="inline-flex min-h-14 cursor-pointer items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 font-bold text-white shadow-lg transition hover:bg-blue-500"
+            >
+              <Plus size={20} />
+              Add Company
+            </button>
+          )}
         </div>
       </section>
 
