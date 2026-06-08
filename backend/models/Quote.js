@@ -58,6 +58,10 @@ const quoteSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    discountEnabled: {
+      type: Boolean,
+      default: false,
+    },
     total: {
       type: Number,
       required: true,

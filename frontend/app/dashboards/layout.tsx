@@ -26,6 +26,7 @@ const navItems = [
 type AuthUser = {
   email?: string;
   role?: string;
+  mustChangePassword?: boolean;
   activeOrganization?: {
     name?: string;
     logoUrl?: string;
@@ -96,6 +97,12 @@ export default function DashboardLayout({
     const refreshUser = async () => {
       try {
         const user = await apiRequest<AuthUser>("/auth/me");
+
+        if (user.mustChangePassword) {
+          router.push("/change-password");
+          return;
+        }
+
         setAuthSession(token, user);
         setCompanyName(user.activeOrganization?.name || "Company");
         setCompanyLogoUrl(user.activeOrganization?.logoUrl || "");

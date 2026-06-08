@@ -52,16 +52,55 @@ const formatServiceRows = (items = [], currency) => {
     .join("");
 };
 
-const getCompanyLogoHtml = (company) => {
-  const companyName = company?.name || "Brent labs";
+const createInitialsLogoHtml = (companyName, size = 48) => {
+  const fontSize = size >= 56 ? 18 : 16;
 
-  if (company?.logoUrl) {
-    return `<img src="${company.logoUrl}" alt="${companyName}" style="height:48px;width:48px;object-fit:cover;border-radius:10px;display:block;" />`;
-  }
-
-  return `<div style="height:48px;width:48px;border-radius:10px;background:#2563eb;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;">${companyName
+  return `<div style="height:${size}px;width:${size}px;border-radius:10px;background:#2563eb;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:${fontSize}px;">${companyName
     .slice(0, 2)
     .toUpperCase()}</div>`;
+};
+
+const getImageExtension = (contentType = "") => {
+  if (contentType.includes("png")) return "png";
+  if (contentType.includes("webp")) return "webp";
+  if (contentType.includes("gif")) return "gif";
+  return "jpg";
+};
+
+const getInlineCompanyLogo = (company, cid, size = 48) => {
+  const companyName = company?.name || "Brent labs";
+  const logoUrl = company?.logoUrl || "";
+
+  if (logoUrl.startsWith("data:image/")) {
+    const match = logoUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+
+    if (match) {
+      const [, contentType, base64Content] = match;
+      return {
+        html: `<img src="cid:${cid}" alt="${companyName}" style="height:${size}px;width:${size}px;object-fit:cover;border-radius:10px;display:block;" />`,
+        attachments: [
+          {
+            filename: `company-logo.${getImageExtension(contentType)}`,
+            content: Buffer.from(base64Content, "base64"),
+            contentType,
+            cid,
+          },
+        ],
+      };
+    }
+  }
+
+  if (logoUrl.startsWith("http://") || logoUrl.startsWith("https://")) {
+    return {
+      html: `<img src="${logoUrl}" alt="${companyName}" style="height:${size}px;width:${size}px;object-fit:cover;border-radius:10px;display:block;" />`,
+      attachments: [],
+    };
+  }
+
+  return {
+    html: createInitialsLogoHtml(companyName, size),
+    attachments: [],
+  };
 };
 
 const createInvoiceFromQuote = async (quote, dueDate) => {
@@ -118,12 +157,15 @@ const sendQuoteEmail = async (quote) => {
   const declineUrl = `${apiBaseUrl}/api/public/quotes/${populatedQuote.actionToken}/decline`;
   const currency = normalizeCurrency(populatedQuote.currency);
   const serviceRows = formatServiceRows(populatedQuote.items, currency);
+  const logo = getInlineCompanyLogo(company, "quote-company-logo");
   const quotePdfBuffer = await generateInvoicePdf({
     invoice: {
       invoiceNumber: populatedQuote.quoteNumber,
       items: populatedQuote.items,
       subtotal: populatedQuote.subtotal,
       currency,
+      tax: populatedQuote.tax,
+      discount: populatedQuote.discount,
       total: populatedQuote.total,
       amountPaid: 0,
       balanceDue: populatedQuote.total,
@@ -145,7 +187,7 @@ const sendQuoteEmail = async (quote) => {
     html: `
       <div style="font-family: Arial, sans-serif; line-height: 1.5;">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
-          ${getCompanyLogoHtml(company)}
+          ${logo.html}
           <strong style="font-size:20px;">${companyName}</strong>
         </div>
         <h2>Quote ${populatedQuote.quoteNumber}</h2>
@@ -175,6 +217,7 @@ const sendQuoteEmail = async (quote) => {
       </div>
     `,
     attachments: [
+      ...logo.attachments,
       {
         filename: `${populatedQuote.quoteNumber}.pdf`,
         content: quotePdfBuffer,
@@ -209,6 +252,7 @@ const sendPaymentEmail = async (invoice) => {
   const currency = normalizeCurrency(populatedInvoice.currency);
   const serviceRows = formatServiceRows(populatedInvoice.items, currency);
   const status = formatStatus(populatedInvoice);
+  const logo = getInlineCompanyLogo(company, "invoice-company-logo");
   const invoicePdfBuffer = await generateInvoicePdf({
     invoice: populatedInvoice,
     customer,
@@ -221,7 +265,7 @@ const sendPaymentEmail = async (invoice) => {
     html: `
       <div style="font-family: Arial, sans-serif; line-height: 1.5;">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
-          ${getCompanyLogoHtml(company)}
+          ${logo.html}
           <strong style="font-size:20px;">${companyName}</strong>
         </div>
         <h2>Invoice ${populatedInvoice.invoiceNumber}</h2>
@@ -249,6 +293,7 @@ const sendPaymentEmail = async (invoice) => {
       </div>
     `,
     attachments: [
+      ...logo.attachments,
       {
         filename: `${populatedInvoice.invoiceNumber}.pdf`,
         content: invoicePdfBuffer,

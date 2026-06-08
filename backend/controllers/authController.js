@@ -1,10 +1,12 @@
 const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const Organization = require("../models/Organization");
 const OrganizationMember = require("../models/OrganizationMember");
 const Invitation = require("../models/Invitation");
 const { normalizeCurrency } = require("../utils/currency");
+const { sendEmail } = require("../utils/emailService");
 const {
   createOrganizationForUser,
   getActiveMembershipForUser,
@@ -38,6 +40,8 @@ const generateToken = (userId) => {
     expiresIn: "30d",
   });
 };
+
+const hashResetToken = (token) => crypto.createHash("sha256").update(token).digest("hex");
 
 const applyPendingInvitationsForUser = async (user) => {
   const invitations = await Invitation.find({
@@ -102,6 +106,7 @@ const buildAuthResponse = async (user, token) => {
     email: user.email,
     role: user.role,
     currency: user.currency,
+    mustChangePassword: user.mustChangePassword,
     organizations,
     activeOrganization,
     token,
@@ -164,6 +169,16 @@ const loginUser = async (req, res) => {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
+    if (
+      user.mustChangePassword &&
+      user.temporaryPasswordExpiresAt &&
+      user.temporaryPasswordExpiresAt < new Date()
+    ) {
+      return res.status(403).json({
+        message: "Temporary password has expired. Please ask your company admin to send a new invitation.",
+      });
+    }
+
     res.json(await buildAuthResponse(user, generateToken(user._id)));
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -178,11 +193,93 @@ const getMe = async (req, res) => {
     email: req.user.email,
     role: req.user.role,
     currency: req.user.currency,
+    mustChangePassword: req.user.mustChangePassword,
     organizations,
     activeOrganization: req.organization
       ? serializeOrganization(req.organization, req.membership)
       : null,
   });
+};
+
+const forgotPassword = async (req, res) => {
+  try {
+    const email = req.body.email?.trim().toLowerCase();
+
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    const genericMessage = "If an account exists for this email, a reset link has been sent.";
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.json({ message: genericMessage });
+    }
+
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    user.passwordResetToken = hashResetToken(resetToken);
+    user.passwordResetExpiresAt = new Date(Date.now() + 60 * 60 * 1000);
+    await user.save();
+
+    const clientUrl = process.env.CLIENT_URL || "http://localhost:3000";
+    const resetUrl = `${clientUrl}/reset-password?token=${resetToken}`;
+
+    await sendEmail({
+      to: user.email,
+      subject: "Reset your DIFMS password",
+      html: `
+        <div style="font-family: Arial, sans-serif; color: #0f172a; line-height: 1.6;">
+          <h2>Password reset request</h2>
+          <p>We received a request to reset your DIFMS password.</p>
+          <p>This link expires in 1 hour.</p>
+          <p>
+            <a href="${resetUrl}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:bold;">
+              Reset Password
+            </a>
+          </p>
+          <p>If you did not request this, you can ignore this email.</p>
+        </div>
+      `,
+    });
+
+    res.json({ message: genericMessage });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const resetPassword = async (req, res) => {
+  try {
+    const { token, password } = req.body;
+
+    if (!token || !password) {
+      return res.status(400).json({ message: "Reset token and new password are required" });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ message: "Password must be at least 6 characters" });
+    }
+
+    const user = await User.findOne({
+      passwordResetToken: hashResetToken(token),
+      passwordResetExpiresAt: { $gt: new Date() },
+    });
+
+    if (!user) {
+      return res.status(400).json({ message: "Reset link is invalid or expired" });
+    }
+
+    user.password = await bcrypt.hash(password, await bcrypt.genSalt(10));
+    user.mustChangePassword = false;
+    user.temporaryPasswordExpiresAt = undefined;
+    user.passwordResetToken = undefined;
+    user.passwordResetExpiresAt = undefined;
+    await user.save();
+
+    res.json({ message: "Password reset successfully. Please log in with your new password." });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 };
 
 const getRegistrationOrganizations = async (req, res) => {
@@ -290,6 +387,7 @@ const updateMe = async (req, res) => {
       email: user.email,
       role: user.role,
       currency: user.currency,
+      mustChangePassword: user.mustChangePassword,
       organizations,
       activeOrganization: req.organization
         ? serializeOrganization(req.organization, req.membership)
@@ -384,11 +482,49 @@ const promoteSuperAdmin = async (req, res) => {
   }
 };
 
+const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ message: "Current password and new password are required" });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: "New password must be at least 6 characters" });
+    }
+
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const passwordMatches = await bcrypt.compare(currentPassword, user.password);
+
+    if (!passwordMatches) {
+      return res.status(401).json({ message: "Current password is incorrect" });
+    }
+
+    user.password = await bcrypt.hash(newPassword, await bcrypt.genSalt(10));
+    user.mustChangePassword = false;
+    user.temporaryPasswordExpiresAt = undefined;
+    await user.save();
+
+    res.json(await buildAuthResponse(user, generateToken(user._id)));
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   registerUser,
   loginUser,
+  forgotPassword,
+  resetPassword,
   getMe,
   updateMe,
+  changePassword,
   promoteSuperAdmin,
   getRegistrationOrganizations,
 };

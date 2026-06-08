@@ -28,6 +28,19 @@ const userSchema = new mongoose.Schema(
       enum: ["GBP", "ZMW"],
       default: "GBP",
     },
+    mustChangePassword: {
+      type: Boolean,
+      default: false,
+    },
+    temporaryPasswordExpiresAt: {
+      type: Date,
+    },
+    passwordResetToken: {
+      type: String,
+    },
+    passwordResetExpiresAt: {
+      type: Date,
+    },
   },
   { timestamps: true }
 );

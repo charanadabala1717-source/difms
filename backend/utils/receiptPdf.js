@@ -168,7 +168,7 @@ const generateInvoicePdf = ({
     addRow(doc, "Issue Date", formatDate(invoice.createdAt || new Date()), startY + 112);
     addRow(doc, "Due Date", invoice.dueDate ? formatDate(invoice.dueDate) : "On receipt", startY + 140);
 
-    doc.roundedRect(50, 400, 495, 90, 8).fill("#f8fafc").stroke("#e2e8f0");
+    doc.roundedRect(50, 400, 495, 105, 8).fill("#f8fafc").stroke("#e2e8f0");
     doc.fillColor("#334155").font("Helvetica-Bold").fontSize(11).text("Amount Due", 75, 428);
     doc
       .fillColor("#2563eb")
@@ -180,8 +180,10 @@ const generateInvoicePdf = ({
       .font("Helvetica")
       .fontSize(10)
       .text(`Subtotal: ${formatMoney(invoice.subtotal ?? invoice.total, invoice.currency)}`, 320, 430)
-      .text(`Paid: ${formatMoney(invoice.amountPaid, invoice.currency)}`, 320, 452)
-      .text(`Total: ${formatMoney(invoice.total, invoice.currency)}`, 320, 474);
+      .text(`Discount: ${formatMoney(invoice.discount || 0, invoice.currency)}`, 320, 444)
+      .text(`Tax: ${formatMoney(invoice.tax || 0, invoice.currency)}`, 320, 458)
+      .text(`Paid: ${formatMoney(invoice.amountPaid, invoice.currency)}`, 320, 472)
+      .text(`Total: ${formatMoney(invoice.total, invoice.currency)}`, 320, 486);
 
     doc.fillColor("#0f172a").font("Helvetica-Bold").fontSize(12).text("Services", 50, 525);
     drawItemsTable(doc, invoice.items, 555);

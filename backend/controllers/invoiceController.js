@@ -87,6 +87,67 @@ const getReceiptLogoPath = () => {
   return path.join(__dirname, "..", "assets", "intern.jpg");
 };
 
+const createInitialsLogoHtml = (companyName, size = 56) => {
+  return `<div style="height:${size}px;width:${size}px;border-radius:10px;background:#2563eb;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;">${companyName
+    .slice(0, 2)
+    .toUpperCase()}</div>`;
+};
+
+const getImageExtension = (contentType = "") => {
+  if (contentType.includes("png")) return "png";
+  if (contentType.includes("webp")) return "webp";
+  if (contentType.includes("gif")) return "gif";
+  return "jpg";
+};
+
+const getInlineCompanyLogo = ({ company, companyName, logoPath, hasLogoFile }) => {
+  const logoUrl = company?.logoUrl || "";
+
+  if (logoUrl.startsWith("data:image/")) {
+    const match = logoUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+
+    if (match) {
+      const [, contentType, base64Content] = match;
+      return {
+        html: `<img src="cid:receipt-logo" alt="${companyName}" style="height:56px;width:56px;object-fit:cover;border-radius:10px;display:block;" />`,
+        attachments: [
+          {
+            filename: `company-logo.${getImageExtension(contentType)}`,
+            content: Buffer.from(base64Content, "base64"),
+            contentType,
+            cid: "receipt-logo",
+          },
+        ],
+      };
+    }
+  }
+
+  if (logoUrl.startsWith("http://") || logoUrl.startsWith("https://")) {
+    return {
+      html: `<img src="${logoUrl}" alt="${companyName}" style="height:56px;width:56px;object-fit:cover;border-radius:10px;display:block;" />`,
+      attachments: [],
+    };
+  }
+
+  if (hasLogoFile) {
+    return {
+      html: `<img src="cid:receipt-logo" alt="${companyName}" style="height:56px;width:56px;object-fit:cover;border-radius:10px;display:block;" />`,
+      attachments: [
+        {
+          filename: path.basename(logoPath),
+          path: logoPath,
+          cid: "receipt-logo",
+        },
+      ],
+    };
+  }
+
+  return {
+    html: createInitialsLogoHtml(companyName),
+    attachments: [],
+  };
+};
+
 const isInvoicePaid = (invoice) => {
   const total = Number(invoice.total) || 0;
   const amountPaid = Number(invoice.amountPaid) || 0;
@@ -352,13 +413,12 @@ const sendReceiptEmail = async (req, res) => {
       "Brent labs Accounts Department, London, United Kingdom";
     const companyEmail = req.organization?.email || process.env.COMPANY_EMAIL || process.env.MAIL_FROM || "";
 
-    const logoHtml = req.organization?.logoUrl
-      ? `<img src="${req.organization.logoUrl}" alt="${companyName}" style="height:56px;width:56px;object-fit:cover;border-radius:10px;display:block;" />`
-      : hasLogoFile
-      ? `<img src="cid:receipt-logo" alt="${companyName}" style="height:56px;width:56px;object-fit:cover;border-radius:10px;display:block;" />`
-      : `<div style="height:56px;width:56px;border-radius:10px;background:#2563eb;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;">${companyName
-          .slice(0, 2)
-          .toUpperCase()}</div>`;
+    const logo = getInlineCompanyLogo({
+      company: req.organization,
+      companyName,
+      logoPath,
+      hasLogoFile,
+    });
     const serviceRows = invoice.items
       .map(
         (item) => `
@@ -378,7 +438,7 @@ const sendReceiptEmail = async (req, res) => {
         <div style="margin:0;padding:0;background:#f8fafc;font-family:Arial,sans-serif;color:#0f172a;">
           <div style="max-width:680px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;">
             <div style="background:#0f172a;color:#ffffff;padding:24px 28px;display:flex;align-items:center;gap:16px;">
-              ${logoHtml}
+              ${logo.html}
               <div>
                 <h1 style="margin:0;font-size:24px;line-height:1.2;">${companyName}</h1>
                 <p style="margin:6px 0 0;color:#cbd5e1;font-size:14px;">Official Payment Receipt</p>
@@ -443,15 +503,7 @@ const sendReceiptEmail = async (req, res) => {
         </div>
       `,
       attachments: [
-        ...(hasLogoFile
-          ? [
-              {
-                filename: "intern.jpg",
-                path: logoPath,
-                cid: "receipt-logo",
-              },
-            ]
-          : []),
+        ...logo.attachments,
         {
           filename: `${receipt.receiptNumber}.pdf`,
           content: pdfBuffer,

@@ -150,6 +150,7 @@ export default function SettingsPage() {
   const [user, setUser] = useState<UserResponse | null>(null);
   const [formData, setFormData] = useState<CompanySettingsForm>(emptyCompanySettings);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasSettingsAccess, setHasSettingsAccess] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [logoDragActive, setLogoDragActive] = useState(false);
   const [countrySearch, setCountrySearch] = useState("");
@@ -190,10 +191,12 @@ export default function SettingsPage() {
           (platformOwnerEmail && currentUser.email === platformOwnerEmail);
 
         if (!canAccessSettings) {
+          setHasSettingsAccess(false);
           router.replace("/dashboards/overview");
           return;
         }
 
+        setHasSettingsAccess(true);
         setUser(currentUser);
         setFormData({
           name: company?.name || "",
@@ -371,6 +374,11 @@ export default function SettingsPage() {
   };
 
   return (
+    isLoading || !hasSettingsAccess ? (
+      <div className="rounded-2xl border border-slate-700 bg-slate-800 p-5 text-center text-white shadow-lg">
+        Checking settings access...
+      </div>
+    ) : (
     <div className="min-h-screen">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-white sm:text-4xl">Company Settings</h1>
@@ -617,7 +625,7 @@ export default function SettingsPage() {
               <div className="rounded-xl border border-slate-700 bg-slate-900/70 p-4 md:col-span-2">
                 <h3 className="text-lg font-bold text-white">Tax & Discount Rules</h3>
                 <p className="mt-1 text-sm text-slate-400">
-                  These defaults will be used later when generating quotes and invoices.
+                  These defaults are applied when generating quotes and invoices.
                 </p>
 
                 <div className="mt-4 grid gap-4 md:grid-cols-2">
@@ -857,5 +865,6 @@ export default function SettingsPage() {
         )}
       </div>
     </div>
+    )
   );
 }

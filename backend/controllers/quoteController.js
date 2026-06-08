@@ -10,7 +10,7 @@ const {
 } = require("../utils/flowHelpers");
 const { normalizeCurrency } = require("../utils/currency");
 
-const calculateTotals = (items, tax = 0, discount = 0) => {
+const calculateTotals = (items, { taxPercentage = 0, discountPercentage = 0, discountEnabled = false } = {}) => {
   const calculatedItems = items.map((item) => {
     const quantity = Number(item.quantity);
     const price = Number(item.price);
@@ -24,20 +24,26 @@ const calculateTotals = (items, tax = 0, discount = 0) => {
   }).filter((item) => item.name && item.quantity > 0 && item.price >= 0);
 
   const subtotal = calculatedItems.reduce((sum, item) => sum + item.total, 0);
-  const total = Math.max(subtotal + Number(tax) - Number(discount), 0);
+  const safeTaxPercentage = Math.max(Number(taxPercentage) || 0, 0);
+  const safeDiscountPercentage = discountEnabled ? Math.max(Number(discountPercentage) || 0, 0) : 0;
+  const discount = (subtotal * safeDiscountPercentage) / 100;
+  const taxableAmount = Math.max(subtotal - discount, 0);
+  const tax = (taxableAmount * safeTaxPercentage) / 100;
+  const total = Math.max(taxableAmount + tax, 0);
 
   return {
     items: calculatedItems,
     subtotal,
-    tax: Number(tax),
-    discount: Number(discount),
+    tax,
+    discount,
+    discountEnabled,
     total,
   };
 };
 
 const createQuote = async (req, res) => {
   try {
-    const { customer, items, tax, discount, validUntil, notes, status, currency } = req.body;
+    const { customer, items, discountEnabled, validUntil, notes, status } = req.body;
 
     if (!customer) {
       return res.status(400).json({ message: "Customer is required" });
@@ -57,7 +63,11 @@ const createQuote = async (req, res) => {
       return res.status(404).json({ message: "Customer not found" });
     }
 
-    const totals = calculateTotals(items, tax, discount);
+    const totals = calculateTotals(items, {
+      taxPercentage: req.organization?.taxPercentage,
+      discountPercentage: req.organization?.discountPercentage,
+      discountEnabled: Boolean(discountEnabled),
+    });
     if (totals.items.length === 0) {
       return res.status(400).json({ message: "At least one valid quote item is required" });
     }
@@ -68,7 +78,7 @@ const createQuote = async (req, res) => {
       customer,
       quoteNumber: createNumber("QTE"),
       ...totals,
-      currency: normalizeCurrency(currency || req.user.currency),
+      currency: normalizeCurrency(req.organization?.currency || req.user.currency),
       validUntil,
       notes,
       status: status || "draft",
@@ -132,7 +142,7 @@ const updateQuote = async (req, res) => {
       return res.status(400).json({ message: "Converted quotes cannot be edited" });
     }
 
-    const { customer, items, tax, discount, validUntil, notes, status, currency } = req.body;
+    const { customer, items, discountEnabled, validUntil, notes, status } = req.body;
 
     if (customer) {
       const existingCustomer = await Customer.findOne({
@@ -149,7 +159,11 @@ const updateQuote = async (req, res) => {
     }
 
     if (items) {
-      const totals = calculateTotals(items, tax ?? quote.tax, discount ?? quote.discount);
+      const totals = calculateTotals(items, {
+        taxPercentage: req.organization?.taxPercentage,
+        discountPercentage: req.organization?.discountPercentage,
+        discountEnabled: discountEnabled !== undefined ? Boolean(discountEnabled) : Boolean(quote.discountEnabled),
+      });
       if (totals.items.length === 0) {
         return res.status(400).json({ message: "At least one valid quote item is required" });
       }
@@ -157,17 +171,26 @@ const updateQuote = async (req, res) => {
       quote.subtotal = totals.subtotal;
       quote.tax = totals.tax;
       quote.discount = totals.discount;
+      quote.discountEnabled = totals.discountEnabled;
       quote.total = totals.total;
     } else {
-      if (tax !== undefined) quote.tax = Number(tax);
-      if (discount !== undefined) quote.discount = Number(discount);
-      quote.total = Math.max(quote.subtotal + quote.tax - quote.discount, 0);
+      if (discountEnabled !== undefined) {
+        const totals = calculateTotals(quote.items, {
+          taxPercentage: req.organization?.taxPercentage,
+          discountPercentage: req.organization?.discountPercentage,
+          discountEnabled: Boolean(discountEnabled),
+        });
+        quote.tax = totals.tax;
+        quote.discount = totals.discount;
+        quote.discountEnabled = totals.discountEnabled;
+        quote.total = totals.total;
+      }
     }
 
     if (validUntil !== undefined) quote.validUntil = validUntil;
     if (notes !== undefined) quote.notes = notes;
     if (status) quote.status = status;
-    if (currency) quote.currency = normalizeCurrency(currency);
+    quote.currency = normalizeCurrency(req.organization?.currency || quote.currency);
 
     const updatedQuote = await quote.save();
     const populatedQuote = await updatedQuote.populate("customer");

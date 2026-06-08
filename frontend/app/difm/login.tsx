@@ -12,6 +12,7 @@ type AuthResponse = {
   email: string;
   role: string;
   token: string;
+  mustChangePassword?: boolean;
   organizations?: unknown[];
   activeOrganization?: unknown;
 };
@@ -45,7 +46,7 @@ export default function Login() {
       });
 
       setAuthSession(user.token, user);
-      router.push("/dashboards/overview");
+      router.push(user.mustChangePassword ? "/change-password" : "/dashboards/overview");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed");
     } finally {
@@ -151,6 +152,16 @@ export default function Login() {
                   ? "Login"
                   : "Register"}
             </button>
+
+            {authMode === "login" && (
+              <button
+                type="button"
+                onClick={() => router.push("/forgot-password")}
+                className="w-full cursor-pointer text-sm font-medium text-blue-100 underline underline-offset-4 hover:text-white"
+              >
+                Forgot password?
+              </button>
+            )}
 
             <button
               type="button"

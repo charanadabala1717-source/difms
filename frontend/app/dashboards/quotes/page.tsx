@@ -43,6 +43,7 @@ type QuoteResponse = {
   subtotal: number;
   tax?: number;
   discount?: number;
+  discountEnabled?: boolean;
   total: number;
   status: QuoteStatus;
   createdAt?: string;
@@ -50,16 +51,17 @@ type QuoteResponse = {
 
 type UserResponse = {
   currency?: CurrencyCode;
+  activeOrganization?: {
+    currency?: CurrencyCode;
+    taxPercentage?: number;
+    discountPercentage?: number;
+  } | null;
 };
-
-const currencyOptions: Array<{ value: CurrencyCode; label: string }> = [
-  { value: "GBP", label: "GBP (£)" },
-  { value: "ZMW", label: "ZMW (K)" },
-];
 
 const emptyForm = {
   customer: "",
   currency: "GBP" as CurrencyCode,
+  discountEnabled: false,
   items: [{ name: "", quantity: "1", price: "" }] as QuoteItem[],
 };
 
@@ -94,6 +96,8 @@ export default function QuotesPage() {
   const [sendingQuoteId, setSendingQuoteId] = useState<string | null>(null);
   const [convertingQuoteId, setConvertingQuoteId] = useState<string | null>(null);
   const [defaultCurrency, setDefaultCurrency] = useState<CurrencyCode>("GBP");
+  const [taxPercentage, setTaxPercentage] = useState(0);
+  const [discountPercentage, setDiscountPercentage] = useState(0);
 
   const loadData = useCallback(async () => {
     try {
@@ -106,7 +110,9 @@ export default function QuotesPage() {
       ]);
       setQuotes(quoteData);
       setCustomers(customerData);
-      setDefaultCurrency(userData.currency || "GBP");
+      setDefaultCurrency(userData.activeOrganization?.currency || userData.currency || "GBP");
+      setTaxPercentage(Number(userData.activeOrganization?.taxPercentage) || 0);
+      setDiscountPercentage(Number(userData.activeOrganization?.discountPercentage) || 0);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load quotes");
     } finally {
@@ -142,11 +148,17 @@ export default function QuotesPage() {
     );
   }, [customers, customerSearch]);
 
-  const quoteTotal = useMemo(() => {
-    return formData.items.reduce((sum, item) => {
+  const quoteTotals = useMemo(() => {
+    const subtotal = formData.items.reduce((sum, item) => {
       return sum + (Number(item.quantity) || 0) * (Number(item.price) || 0);
     }, 0);
-  }, [formData.items]);
+    const discount = formData.discountEnabled ? (subtotal * discountPercentage) / 100 : 0;
+    const taxableAmount = Math.max(subtotal - discount, 0);
+    const tax = (taxableAmount * taxPercentage) / 100;
+    const total = Math.max(taxableAmount + tax, 0);
+
+    return { subtotal, discount, tax, total };
+  }, [discountPercentage, formData.discountEnabled, formData.items, taxPercentage]);
 
   const openAddModal = () => {
     setEditingQuoteId(null);
@@ -159,7 +171,8 @@ export default function QuotesPage() {
     setEditingQuoteId(quote._id);
     setFormData({
       customer: quote.customer?._id || "",
-      currency: quote.currency || "GBP",
+      currency: quote.currency || defaultCurrency,
+      discountEnabled: Boolean(quote.discountEnabled || Number(quote.discount) > 0),
       items:
         quote.items.length > 0
           ? quote.items.map((item) => ({
@@ -222,7 +235,7 @@ export default function QuotesPage() {
 
       const payload = {
         customer: formData.customer,
-        currency: formData.currency,
+        discountEnabled: formData.discountEnabled,
         items: validItems.map((item) => ({
           name: item.name.trim(),
           quantity: Number(item.quantity),
@@ -485,8 +498,8 @@ export default function QuotesPage() {
             </div>
 
             <form onSubmit={handleSave} className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div className="sm:col-span-2">
+              <div className="grid grid-cols-1 gap-4">
+                <div>
                   <label className="mb-2 block text-sm font-medium text-slate-300">
                     Search Customer
                   </label>
@@ -499,27 +512,6 @@ export default function QuotesPage() {
                   />
                 </div>
 
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-300">
-                    Currency
-                  </label>
-                  <select
-                    value={formData.currency}
-                    onChange={(event) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        currency: event.target.value as CurrencyCode,
-                      }))
-                    }
-                    className="w-full cursor-pointer rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-sm text-white outline-none transition focus:border-blue-500"
-                  >
-                    {currencyOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
               </div>
 
               <div className="rounded-2xl border border-slate-700 bg-slate-800/60 p-4">
@@ -633,14 +625,57 @@ export default function QuotesPage() {
                 </button>
 
                 <div className="mt-5 border-t border-slate-700 pt-4">
-                  <div className="flex items-center justify-between text-sm text-slate-300">
-                    <span>Subtotal</span>
-                    <span>{formatCurrency(quoteTotal, formData.currency)}</span>
+                  <div className="mb-4 flex flex-col gap-3 rounded-xl border border-slate-700 bg-slate-900 p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-white">Apply discount</p>
+                      <p className="text-xs text-slate-400">
+                        Uses company discount setting: {discountPercentage}%
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          discountEnabled: !prev.discountEnabled,
+                        }))
+                      }
+                      className={`relative h-7 w-12 cursor-pointer rounded-full transition ${
+                        formData.discountEnabled ? "bg-blue-600" : "bg-slate-600"
+                      }`}
+                      aria-pressed={formData.discountEnabled}
+                      aria-label="Toggle quote discount"
+                    >
+                      <span
+                        className={`absolute top-1 h-5 w-5 rounded-full bg-white transition ${
+                          formData.discountEnabled ? "left-6" : "left-1"
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  <div className="space-y-2 text-sm text-slate-300">
+                    <div className="flex items-center justify-between">
+                      <span>Currency</span>
+                      <span className="font-semibold text-white">{formData.currency}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Subtotal</span>
+                      <span>{formatCurrency(quoteTotals.subtotal, formData.currency)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Discount ({formData.discountEnabled ? discountPercentage : 0}%)</span>
+                      <span>-{formatCurrency(quoteTotals.discount, formData.currency)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Tax ({taxPercentage}%)</span>
+                      <span>{formatCurrency(quoteTotals.tax, formData.currency)}</span>
+                    </div>
                   </div>
                   <div className="mt-4 border-t border-slate-500 pt-4">
                     <div className="flex items-center justify-between text-lg font-bold text-white">
                       <span>Total</span>
-                      <span>{formatCurrency(quoteTotal, formData.currency)}</span>
+                      <span>{formatCurrency(quoteTotals.total, formData.currency)}</span>
                     </div>
                   </div>
                 </div>

@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const bcrypt = require("bcryptjs");
 const Invitation = require("../models/Invitation");
 const OrganizationMember = require("../models/OrganizationMember");
 const User = require("../models/User");
@@ -10,6 +11,10 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const canManageTeam = (membership) => ["owner", "admin"].includes(membership?.role);
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const generateTemporaryPassword = () => {
+  return crypto.randomBytes(9).toString("base64url");
+};
 
 const searchUsers = async (req, res) => {
   try {
@@ -95,7 +100,7 @@ const getMembersAndInvitations = async (req, res) => {
   }
 };
 
-const sendInvitationEmail = async ({ email, role, organization, existingUser }) => {
+const sendInvitationEmail = async ({ email, role, organization, existingUser, temporaryPassword }) => {
   const clientUrl = process.env.CLIENT_URL || "http://localhost:3000";
   const subject = existingUser
     ? `You now have access to ${organization.name}`
@@ -110,9 +115,19 @@ const sendInvitationEmail = async ({ email, role, organization, existingUser }) 
         ${
           existingUser
             ? "You can log in with your existing account to access this company."
-            : "Please create an account using this same email address. Your company access will be added automatically after registration."
+            : "An account has been created for you. Please log in with the temporary password below. You will be asked to change it before accessing the dashboard."
         }
       </p>
+      ${
+        temporaryPassword
+          ? `
+            <div style="background:#f1f5f9;border:1px solid #cbd5e1;border-radius:8px;padding:12px;margin:16px 0;">
+              <p style="margin:0 0 8px;"><strong>Email:</strong> ${email}</p>
+              <p style="margin:0;"><strong>Temporary Password:</strong> ${temporaryPassword}</p>
+            </div>
+          `
+          : ""
+      }
       <p>
         <a href="${clientUrl}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:bold;">
           Open DIFMS
@@ -195,6 +210,26 @@ const inviteUser = async (req, res) => {
       });
     }
 
+    const temporaryPassword = generateTemporaryPassword();
+    const hashedPassword = await bcrypt.hash(temporaryPassword, await bcrypt.genSalt(10));
+    const invitedUser = await User.create({
+      name: email.split("@")[0],
+      email,
+      password: hashedPassword,
+      mustChangePassword: true,
+      temporaryPasswordExpiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    });
+
+    await OrganizationMember.create({
+      organization: req.organization._id,
+      user: invitedUser._id,
+      role,
+      status: "active",
+      invitedBy: req.user._id,
+      invitedAt: new Date(),
+      joinedAt: new Date(),
+    });
+
     const invitation = await Invitation.findOneAndUpdate(
       {
         organization: req.organization._id,
@@ -206,8 +241,10 @@ const inviteUser = async (req, res) => {
         email,
         role,
         token: crypto.randomBytes(32).toString("hex"),
-        status: "pending",
+        status: "accepted",
         invitedBy: req.user._id,
+        acceptedBy: invitedUser._id,
+        acceptedAt: new Date(),
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       },
       {
@@ -222,10 +259,11 @@ const inviteUser = async (req, res) => {
       role: invitation.role,
       organization: req.organization,
       existingUser: false,
+      temporaryPassword,
     });
 
     res.status(201).json({
-      message: "Invitation sent",
+      message: "User account created and temporary login credentials sent",
       invitation,
       email: emailResult,
     });
