@@ -55,6 +55,7 @@ type UserResponse = {
     currency?: CurrencyCode;
     taxPercentage?: number;
     discountPercentage?: number;
+    role?: string;
   } | null;
 };
 
@@ -98,6 +99,7 @@ export default function QuotesPage() {
   const [defaultCurrency, setDefaultCurrency] = useState<CurrencyCode>("GBP");
   const [taxPercentage, setTaxPercentage] = useState(0);
   const [discountPercentage, setDiscountPercentage] = useState(0);
+  const [canEditWorkspace, setCanEditWorkspace] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -113,6 +115,7 @@ export default function QuotesPage() {
       setDefaultCurrency(userData.activeOrganization?.currency || userData.currency || "GBP");
       setTaxPercentage(Number(userData.activeOrganization?.taxPercentage) || 0);
       setDiscountPercentage(Number(userData.activeOrganization?.discountPercentage) || 0);
+      setCanEditWorkspace(userData.activeOrganization?.role !== "viewer");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load quotes");
     } finally {
@@ -161,6 +164,7 @@ export default function QuotesPage() {
   }, [discountPercentage, formData.discountEnabled, formData.items, taxPercentage]);
 
   const openAddModal = () => {
+    if (!canEditWorkspace) return;
     setEditingQuoteId(null);
     setFormData({ ...emptyForm, currency: defaultCurrency });
     setCustomerSearch("");
@@ -168,6 +172,7 @@ export default function QuotesPage() {
   };
 
   const openEditModal = (quote: QuoteResponse) => {
+    if (!canEditWorkspace) return;
     setEditingQuoteId(quote._id);
     setFormData({
       customer: quote.customer?._id || "",
@@ -223,6 +228,12 @@ export default function QuotesPage() {
 
   const handleSave = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
+    if (!canEditWorkspace) {
+      setError("Viewers have read-only access");
+      return;
+    }
+
     const validItems = formData.items.filter(
       (item) => item.name.trim() && Number(item.quantity) > 0 && Number(item.price) >= 0
     );
@@ -263,6 +274,11 @@ export default function QuotesPage() {
   };
 
   const handleSendQuote = async (quote: QuoteResponse) => {
+    if (!canEditWorkspace) {
+      setError("Viewers have read-only access");
+      return;
+    }
+
     try {
       setError("");
       setSuccessMessage("");
@@ -280,6 +296,11 @@ export default function QuotesPage() {
   };
 
   const handleConvertQuote = async (quote: QuoteResponse) => {
+    if (!canEditWorkspace) {
+      setError("Viewers have read-only access");
+      return;
+    }
+
     try {
       setError("");
       setSuccessMessage("");
@@ -337,13 +358,15 @@ export default function QuotesPage() {
             />
           </div>
 
-          <button
-            onClick={openAddModal}
-            className="flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-blue-700"
-          >
-            <FilePlus2 size={18} />
-            Add Quote
-          </button>
+          {canEditWorkspace && (
+            <button
+              onClick={openAddModal}
+              className="flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-blue-700"
+            >
+              <FilePlus2 size={18} />
+              Add Quote
+            </button>
+          )}
         </div>
       </div>
 
@@ -370,7 +393,14 @@ export default function QuotesPage() {
           <table className="w-full min-w-full border-separate border-spacing-y-3">
             <thead>
               <tr>
-                {["Quote ID", "Customer", "Services", "Amount", "Status", "Actions"].map(
+                {[
+                  "Quote ID",
+                  "Customer",
+                  "Services",
+                  "Amount",
+                  "Status",
+                  ...(canEditWorkspace ? ["Actions"] : []),
+                ].map(
                   (heading) => (
                     <th
                       key={heading}
@@ -387,7 +417,7 @@ export default function QuotesPage() {
               {isLoading ? (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={canEditWorkspace ? 6 : 5}
                     className="rounded-xl bg-slate-700/30 px-4 py-8 text-center text-sm text-slate-300"
                   >
                     Loading quotes...
@@ -420,50 +450,52 @@ export default function QuotesPage() {
                         {toUiStatus(quote.status)}
                       </span>
                     </td>
-                    <td className="rounded-r-xl px-4 py-4">
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => openEditModal(quote)}
-                          disabled={quote.status === "converted"}
-                          className="cursor-pointer rounded-lg bg-blue-500/10 p-2 text-blue-400 transition hover:bg-blue-500/20 disabled:cursor-not-allowed disabled:opacity-40"
-                          aria-label={`Edit ${quote.quoteNumber}`}
-                        >
-                          <Pencil size={16} />
-                        </button>
+                    {canEditWorkspace && (
+                      <td className="rounded-r-xl px-4 py-4">
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => openEditModal(quote)}
+                            disabled={quote.status === "converted"}
+                            className="cursor-pointer rounded-lg bg-blue-500/10 p-2 text-blue-400 transition hover:bg-blue-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                            aria-label={`Edit ${quote.quoteNumber}`}
+                          >
+                            <Pencil size={16} />
+                          </button>
 
-                        <button
-                          onClick={() => handleSendQuote(quote)}
-                          disabled={sendingQuoteId === quote._id || quote.status === "converted"}
-                          className="cursor-pointer rounded-lg bg-emerald-500/10 p-2 text-emerald-400 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
-                          aria-label={`Send ${quote.quoteNumber}`}
-                          title="Send quote"
-                        >
-                          <Mail size={16} />
-                        </button>
+                          <button
+                            onClick={() => handleSendQuote(quote)}
+                            disabled={sendingQuoteId === quote._id || quote.status === "converted"}
+                            className="cursor-pointer rounded-lg bg-emerald-500/10 p-2 text-emerald-400 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                            aria-label={`Send ${quote.quoteNumber}`}
+                            title="Send quote"
+                          >
+                            <Mail size={16} />
+                          </button>
 
-                        <button
-                          onClick={() => handleConvertQuote(quote)}
-                          disabled={
-                            quote.status !== "accepted" || convertingQuoteId === quote._id
-                          }
-                          className="cursor-pointer rounded-lg bg-sky-500/10 p-2 text-sky-400 transition hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-40"
-                          aria-label={`Convert ${quote.quoteNumber} to invoice`}
-                          title={
-                            quote.status === "accepted"
-                              ? "Convert to invoice"
-                              : "Available after customer accepts"
-                          }
-                        >
-                          <CheckCircle2 size={16} />
-                        </button>
-                      </div>
-                    </td>
+                          <button
+                            onClick={() => handleConvertQuote(quote)}
+                            disabled={
+                              quote.status !== "accepted" || convertingQuoteId === quote._id
+                            }
+                            className="cursor-pointer rounded-lg bg-sky-500/10 p-2 text-sky-400 transition hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                            aria-label={`Convert ${quote.quoteNumber} to invoice`}
+                            title={
+                              quote.status === "accepted"
+                                ? "Convert to invoice"
+                                : "Available after customer accepts"
+                            }
+                          >
+                            <CheckCircle2 size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))
               ) : (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={canEditWorkspace ? 6 : 5}
                     className="rounded-xl bg-slate-700/30 px-4 py-8 text-center text-sm text-slate-300"
                   >
                     No quotes found.

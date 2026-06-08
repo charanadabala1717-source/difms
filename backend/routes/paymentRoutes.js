@@ -6,13 +6,13 @@ const {
   getReceiptById,
   getReceiptByPayment,
 } = require("../controllers/paymentController");
-const { protect } = require("../middleware/authMiddleware");
+const { protect, requireWorkspaceWriteAccess } = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
 router.use(protect);
 
-router.route("/").post(recordPayment).get(getPayments);
+router.route("/").post(requireWorkspaceWriteAccess, recordPayment).get(getPayments);
 router.get("/invoice/:invoiceId", getPaymentsByInvoice);
 router.get("/receipts/payment/:paymentId", getReceiptByPayment);
 router.get("/receipts/:id", getReceiptById);

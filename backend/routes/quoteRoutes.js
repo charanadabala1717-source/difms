@@ -8,16 +8,16 @@ const {
   sendQuote,
   convertQuoteToInvoice,
 } = require("../controllers/quoteController");
-const { protect } = require("../middleware/authMiddleware");
+const { protect, requireWorkspaceWriteAccess } = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
 router.use(protect);
 
-router.route("/").post(createQuote).get(getQuotes);
-router.post("/:id/send", sendQuote);
-router.post("/:id/accept", acceptQuote);
-router.post("/:id/convert-to-invoice", convertQuoteToInvoice);
-router.route("/:id").get(getQuoteById).put(updateQuote);
+router.route("/").post(requireWorkspaceWriteAccess, createQuote).get(getQuotes);
+router.post("/:id/send", requireWorkspaceWriteAccess, sendQuote);
+router.post("/:id/accept", requireWorkspaceWriteAccess, acceptQuote);
+router.post("/:id/convert-to-invoice", requireWorkspaceWriteAccess, convertQuoteToInvoice);
+router.route("/:id").get(getQuoteById).put(requireWorkspaceWriteAccess, updateQuote);
 
 module.exports = router;

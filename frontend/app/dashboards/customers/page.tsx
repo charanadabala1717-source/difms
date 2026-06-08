@@ -25,6 +25,12 @@ type CustomerResponse = {
   address?: string;
 };
 
+type UserResponse = {
+  activeOrganization?: {
+    role?: string;
+  } | null;
+};
+
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const emptyForm = {
@@ -300,6 +306,7 @@ export default function CustomersPage() {
   const [error, setError] = useState("");
   const [countrySearch, setCountrySearch] = useState("");
   const [isCountryDropdownOpen, setIsCountryDropdownOpen] = useState(false);
+  const [canEditWorkspace, setCanEditWorkspace] = useState(false);
 
   const mapCustomer = (customer: CustomerResponse, index: number): CustomerRow => ({
     id: customer._id,
@@ -321,7 +328,11 @@ export default function CustomersPage() {
     try {
       setIsLoading(true);
       setError("");
-      const data = await apiRequest<CustomerResponse[]>("/customers");
+      const [data, userData] = await Promise.all([
+        apiRequest<CustomerResponse[]>("/customers"),
+        apiRequest<UserResponse>("/auth/me"),
+      ]);
+      setCanEditWorkspace(userData.activeOrganization?.role !== "viewer");
       setCustomers(data.map(mapCustomer));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load customers");
@@ -364,6 +375,7 @@ export default function CustomersPage() {
   }, [countrySearch]);
 
   const openAddModal = () => {
+    if (!canEditWorkspace) return;
     setEditingCustomerId(null);
     setFormData(emptyForm);
     setCountrySearch("");
@@ -372,6 +384,7 @@ export default function CustomersPage() {
   };
 
   const openEditModal = (customer: CustomerRow) => {
+    if (!canEditWorkspace) return;
     setEditingCustomerId(customer.id);
     setFormData({
       name: customer.name,
@@ -408,6 +421,11 @@ export default function CustomersPage() {
 
   const handleSave = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
+    if (!canEditWorkspace) {
+      setError("Viewers have read-only access");
+      return;
+    }
 
     if (!formData.name.trim()) {
       setError("Customer name is required");
@@ -465,6 +483,11 @@ export default function CustomersPage() {
   };
 
   const handleDelete = async (id: string) => {
+    if (!canEditWorkspace) {
+      setError("Viewers have read-only access");
+      return;
+    }
+
     try {
       setError("");
       await apiRequest(`/customers/${id}`, { method: "DELETE" });
@@ -499,13 +522,15 @@ export default function CustomersPage() {
             />
           </div>
 
-          <button
-            onClick={openAddModal}
-            className="flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-blue-700"
-          >
-            <Plus size={18} />
-            Add Customer
-          </button>
+          {canEditWorkspace && (
+            <button
+              onClick={openAddModal}
+              className="flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-blue-700"
+            >
+              <Plus size={18} />
+              Add Customer
+            </button>
+          )}
         </div>
       </div>
 
@@ -527,7 +552,14 @@ export default function CustomersPage() {
           <table className="w-full min-w-full border-separate border-spacing-y-3">
             <thead>
               <tr>
-                {["Customer ID", "Name", "Email", "Phone", "Address", "Actions"].map(
+                {[
+                  "Customer ID",
+                  "Name",
+                  "Email",
+                  "Phone",
+                  "Address",
+                  ...(canEditWorkspace ? ["Actions"] : []),
+                ].map(
                   (heading) => (
                     <th
                       key={heading}
@@ -544,7 +576,7 @@ export default function CustomersPage() {
               {isLoading ? (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={canEditWorkspace ? 6 : 5}
                     className="rounded-xl bg-slate-700/30 px-4 py-8 text-center text-sm text-slate-300"
                   >
                     Loading customers...
@@ -565,31 +597,33 @@ export default function CustomersPage() {
                     <td className="break-words px-4 py-4 text-sm text-slate-200">
                       {customer.address || "-"}
                     </td>
-                    <td className="rounded-r-xl px-4 py-4">
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => openEditModal(customer)}
-                          className="cursor-pointer rounded-lg bg-blue-500/10 p-2 text-blue-400 transition hover:bg-blue-500/20"
-                          aria-label={`Edit ${customer.name}`}
-                        >
-                          <Pencil size={16} />
-                        </button>
+                    {canEditWorkspace && (
+                      <td className="rounded-r-xl px-4 py-4">
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => openEditModal(customer)}
+                            className="cursor-pointer rounded-lg bg-blue-500/10 p-2 text-blue-400 transition hover:bg-blue-500/20"
+                            aria-label={`Edit ${customer.name}`}
+                          >
+                            <Pencil size={16} />
+                          </button>
 
-                        <button
-                          onClick={() => handleDelete(customer.id)}
-                          className="cursor-pointer rounded-lg bg-red-500/10 p-2 text-red-400 transition hover:bg-red-500/20"
-                          aria-label={`Delete ${customer.name}`}
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
+                          <button
+                            onClick={() => handleDelete(customer.id)}
+                            className="cursor-pointer rounded-lg bg-red-500/10 p-2 text-red-400 transition hover:bg-red-500/20"
+                            aria-label={`Delete ${customer.name}`}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))
               ) : (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={canEditWorkspace ? 6 : 5}
                     className="rounded-xl bg-slate-700/30 px-4 py-8 text-center text-sm text-slate-300"
                   >
                     No customer records found.

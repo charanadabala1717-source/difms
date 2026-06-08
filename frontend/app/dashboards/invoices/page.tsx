@@ -28,6 +28,12 @@ type InvoiceResponse = {
   status: "draft" | "sent" | "partially_paid" | "paid" | "overdue" | "cancelled";
 };
 
+type UserResponse = {
+  activeOrganization?: {
+    role?: string;
+  } | null;
+};
+
 const emptyForm = {
   customerName: "",
   amount: "",
@@ -77,12 +83,17 @@ export default function InvoicesPage() {
   const [successMessage, setSuccessMessage] = useState("");
   const [sendingReceiptId, setSendingReceiptId] = useState<string | null>(null);
   const [downloadingPdfId, setDownloadingPdfId] = useState<string | null>(null);
+  const [canEditWorkspace, setCanEditWorkspace] = useState(false);
 
   const loadInvoices = useCallback(async () => {
     try {
       setIsLoading(true);
       setError("");
-      const data = await apiRequest<InvoiceResponse[]>("/invoices");
+      const [data, userData] = await Promise.all([
+        apiRequest<InvoiceResponse[]>("/invoices"),
+        apiRequest<UserResponse>("/auth/me"),
+      ]);
+      setCanEditWorkspace(userData.activeOrganization?.role !== "viewer");
       setInvoices(data.map(mapInvoice));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load invoices");
@@ -108,6 +119,7 @@ export default function InvoicesPage() {
   }, [invoices, searchTerm]);
 
   const openEditModal = (invoice: InvoiceRow) => {
+    if (!canEditWorkspace) return;
     setEditingInvoiceId(invoice.id);
     setFormData({
       customerName: invoice.customerName,
@@ -125,6 +137,11 @@ export default function InvoicesPage() {
   };
 
   const handleDelete = async (id: string) => {
+    if (!canEditWorkspace) {
+      setError("Viewers have read-only access");
+      return;
+    }
+
     try {
       setError("");
       setSuccessMessage("");
@@ -148,6 +165,11 @@ export default function InvoicesPage() {
 
   const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+
+    if (!canEditWorkspace) {
+      setError("Viewers have read-only access");
+      return;
+    }
 
     if (!formData.customerName.trim() || !formData.amount.trim()) return;
 
@@ -205,6 +227,11 @@ export default function InvoicesPage() {
   };
 
   const handleSendReceiptEmail = async (invoice: InvoiceRow) => {
+    if (!canEditWorkspace) {
+      setError("Viewers have read-only access");
+      return;
+    }
+
     try {
       setError("");
       setSuccessMessage("");
@@ -343,13 +370,15 @@ export default function InvoicesPage() {
                     </td>
                     <td className="rounded-r-xl px-4 py-4">
                       <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => openEditModal(invoice)}
-                          className="cursor-pointer rounded-lg bg-blue-500/10 p-2 text-blue-400 transition hover:bg-blue-500/20"
-                          aria-label={`Edit ${invoice.invoiceId}`}
-                        >
-                          <Pencil size={16} />
-                        </button>
+                        {canEditWorkspace && (
+                          <button
+                            onClick={() => openEditModal(invoice)}
+                            className="cursor-pointer rounded-lg bg-blue-500/10 p-2 text-blue-400 transition hover:bg-blue-500/20"
+                            aria-label={`Edit ${invoice.invoiceId}`}
+                          >
+                            <Pencil size={16} />
+                          </button>
+                        )}
 
                         <button
                           onClick={() => handleDownloadPdf(invoice)}
@@ -361,27 +390,31 @@ export default function InvoicesPage() {
                           <FileDown size={16} />
                         </button>
 
-                        <button
-                          onClick={() => handleSendReceiptEmail(invoice)}
-                          disabled={invoice.status !== "Paid" || sendingReceiptId === invoice.id}
-                          className="cursor-pointer rounded-lg bg-sky-500/10 p-2 text-sky-400 transition hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-40"
-                          aria-label={`Email receipt for ${invoice.invoiceId}`}
-                          title={
-                            invoice.status === "Paid"
-                              ? "Email receipt"
-                              : "Receipt email is available after payment"
-                          }
-                        >
-                          <Mail size={16} />
-                        </button>
+                        {canEditWorkspace && (
+                          <>
+                            <button
+                              onClick={() => handleSendReceiptEmail(invoice)}
+                              disabled={invoice.status !== "Paid" || sendingReceiptId === invoice.id}
+                              className="cursor-pointer rounded-lg bg-sky-500/10 p-2 text-sky-400 transition hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                              aria-label={`Email receipt for ${invoice.invoiceId}`}
+                              title={
+                                invoice.status === "Paid"
+                                  ? "Email receipt"
+                                  : "Receipt email is available after payment"
+                              }
+                            >
+                              <Mail size={16} />
+                            </button>
 
-                        <button
-                          onClick={() => handleDelete(invoice.id)}
-                          className="cursor-pointer rounded-lg bg-red-500/10 p-2 text-red-400 transition hover:bg-red-500/20"
-                          aria-label={`Delete ${invoice.invoiceId}`}
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                            <button
+                              onClick={() => handleDelete(invoice.id)}
+                              className="cursor-pointer rounded-lg bg-red-500/10 p-2 text-red-400 transition hover:bg-red-500/20"
+                              aria-label={`Delete ${invoice.invoiceId}`}
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

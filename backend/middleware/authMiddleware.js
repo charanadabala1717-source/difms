@@ -55,4 +55,12 @@ const requireSuperAdmin = (req, res, next) => {
   next();
 };
 
-module.exports = { protect, requireSuperAdmin };
+const requireWorkspaceWriteAccess = (req, res, next) => {
+  if (req.membership?.role === "viewer") {
+    return res.status(403).json({ message: "Viewers have read-only access" });
+  }
+
+  next();
+};
+
+module.exports = { protect, requireSuperAdmin, requireWorkspaceWriteAccess };
