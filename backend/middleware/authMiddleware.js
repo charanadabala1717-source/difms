@@ -22,6 +22,27 @@ const protect = async (req, res, next) => {
     }
 
     req.user = user;
+
+    if (user.mustChangePassword) {
+      const allowedTemporaryPasswordRoutes = ["/api/auth/me", "/api/auth/change-password"];
+
+      if (
+        user.temporaryPasswordExpiresAt &&
+        user.temporaryPasswordExpiresAt < new Date()
+      ) {
+        return res.status(403).json({
+          message: "Temporary password has expired. Please ask your company admin to send a new invitation.",
+        });
+      }
+
+      if (!allowedTemporaryPasswordRoutes.includes(req.originalUrl.split("?")[0])) {
+        return res.status(403).json({
+          message: "Please change your temporary password before continuing.",
+          mustChangePassword: true,
+        });
+      }
+    }
+
     const requestedOrganizationId = req.headers["x-organization-id"];
     const membership = await getActiveMembershipForUser(user._id, requestedOrganizationId);
 

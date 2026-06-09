@@ -163,19 +163,19 @@ export default function Login() {
               </button>
             )}
 
-            <button
-              type="button"
-              onClick={() => {
-                setAuthMode((prev) => (prev === "login" ? "register" : "login"));
-                setName("");
-                setError("");
-              }}
-              className="w-full cursor-pointer text-sm font-medium text-blue-100 underline underline-offset-4 hover:text-white"
-            >
-              {authMode === "login"
-                ? "Create a new account"
-                : "Already have an account? Login"}
-            </button>
+            {authMode === "register" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode("login");
+                  setName("");
+                  setError("");
+                }}
+                className="w-full cursor-pointer text-sm font-medium text-blue-100 underline underline-offset-4 hover:text-white"
+              >
+                Already have an account? Login
+              </button>
+            )}
           </form>
           
         </div>
