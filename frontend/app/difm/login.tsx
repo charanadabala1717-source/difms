@@ -75,7 +75,7 @@ export default function Login() {
           </div>
 
           <h1 className="mb-7 text-center text-3xl font-semibold tracking-wide text-white sm:text-4xl">
-            {authMode === "login" ? "Admin Login" : "Create Account"}
+            {authMode === "login" ? "Login" : "Create Account"}
           </h1>
 
           <form onSubmit={handleSubmit} className="space-y-4">
