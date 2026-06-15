@@ -1,36 +1,135 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# DIFMS Frontend
 
-## Getting Started
+Next.js dashboard application for the DIFMS SaaS invoicing platform.
 
-First, run the development server:
+## What This App Does
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+The frontend provides the browser UI for:
+
+- Login
+- Forgot password and reset password
+- Forced temporary password change after invitation
+- Dashboard overview
+- Customers
+- Quotes
+- Invoices
+- Company settings
+- Users and roles
+- Super admin company management
+
+The app connects to the Express backend through REST API calls from `app/difm/lib/api.ts`.
+
+## Tech Stack
+
+- Next.js 16
+- React 19
+- TypeScript
+- Tailwind CSS
+- lucide-react icons
+- Recharts
+
+## Folder Structure
+
+```text
+frontend/
+  app/
+    page.tsx                         Login entry page
+    difm/
+      login.tsx                      Login form
+      lib/api.ts                     API helper and auth session storage
+    change-password/page.tsx         Temporary password change page
+    forgot-password/page.tsx         Forgot password page
+    reset-password/page.tsx          Reset password page
+    dashboards/
+      layout.tsx                     Dashboard shell and navigation
+      overview/page.tsx              Metrics overview
+      customers/page.tsx             Customer records
+      quotes/page.tsx                Quote creation and management
+      invoices/page.tsx              Invoice list and PDF actions
+      settings/page.tsx              Company settings, users, roles
+      super-admin/                   Platform admin pages
+  public/
+    images/
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Environment Variables
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Create `frontend/.env.local`.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```env
+NEXT_PUBLIC_API_URL=http://localhost:5000/api
+NEXT_PUBLIC_SUPER_ADMIN_CREATOR_EMAIL=owner@example.com
+```
 
-## Learn More
+For production:
 
-To learn more about Next.js, take a look at the following resources:
+```env
+NEXT_PUBLIC_API_URL=https://your-backend-domain/api
+NEXT_PUBLIC_SUPER_ADMIN_CREATOR_EMAIL=owner@example.com
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Setup
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-## Deploy on Vercel
+Open:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```text
+http://localhost:3000
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Scripts
+
+```bash
+npm run dev      # Start local development server
+npm run build    # Build production app
+npm run start    # Run production build
+npm run lint     # Run ESLint
+```
+
+## Authentication Flow
+
+- Login stores JWT token and user data in `localStorage`.
+- API requests automatically send:
+  - `Authorization: Bearer <token>`
+  - `x-organization-id: <active organization id>`
+- If `mustChangePassword` is true, the user is redirected to `/change-password`.
+- Dashboard layout re-checks `/auth/me` to protect dashboard pages.
+
+## Role Behavior
+
+- Owner/Admin: can access settings and manage users.
+- Staff: can work with operational modules.
+- Viewer: read-only UI. Write actions are hidden.
+- Platform owner email can access super admin actions when configured.
+
+## Main Pages
+
+- `/` - Login
+- `/forgot-password`
+- `/reset-password?token=...`
+- `/change-password`
+- `/dashboards/overview`
+- `/dashboards/customers`
+- `/dashboards/quotes`
+- `/dashboards/invoices`
+- `/dashboards/settings`
+- `/dashboards/super-admin/companies`
+- `/dashboards/super-admin/make-super-admin`
+
+## Deployment
+
+Deploy the `frontend` folder as a Next.js app on Vercel.
+
+Set these Vercel environment variables:
+
+```env
+NEXT_PUBLIC_API_URL=https://your-backend-domain/api
+NEXT_PUBLIC_SUPER_ADMIN_CREATOR_EMAIL=owner@example.com
+```
+
+After deployment, make sure the backend `CLIENT_URL` points to the frontend production URL.
