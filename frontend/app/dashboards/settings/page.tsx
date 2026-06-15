@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, ChevronDown, ImagePlus, Mail, Search, UserCog, Users, X } from "lucide-react";
+import { Building2, ChevronDown, ImagePlus, Mail, Search, Trash2, UserCog, Users, X } from "lucide-react";
 import { apiRequest } from "../../difm/lib/api";
 
 type CurrencyCode = "GBP" | "ZMW";
@@ -289,6 +289,29 @@ export default function SettingsPage() {
     } catch {
       setUserSuggestions([]);
       setShowUserSuggestions(false);
+    }
+  };
+
+  const handleRemoveMember = async (member: TeamAccessResponse["members"][number]) => {
+    if (!canEditCompany || !member.user) return;
+
+    const memberName = member.user.name || member.user.email;
+    const confirmed = window.confirm(`Remove ${memberName} from this company?`);
+
+    if (!confirmed) return;
+
+    try {
+      setMessage("");
+      setError("");
+      const response = await apiRequest<{ message: string }>(
+        `/organization/members/${member._id}`,
+        { method: "DELETE" }
+      );
+
+      setMessage(response.message || "Member removed from this company");
+      await loadTeamAccess();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to remove member");
     }
   };
 
@@ -779,9 +802,22 @@ export default function SettingsPage() {
                           </p>
                           <p className="break-words text-sm text-slate-400">{member.user?.email}</p>
                         </div>
-                        <span className="w-fit rounded-full bg-blue-100 px-3 py-1 text-sm font-bold capitalize text-blue-700">
-                          {member.role}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="w-fit rounded-full bg-blue-100 px-3 py-1 text-sm font-bold capitalize text-blue-700">
+                            {member.role}
+                          </span>
+                          {member.role !== "owner" && member.user?._id !== user?._id && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveMember(member)}
+                              className="inline-flex cursor-pointer items-center justify-center rounded-lg bg-red-500/10 p-2 text-red-300 transition hover:bg-red-500/20"
+                              aria-label={`Remove ${member.user?.name || "member"}`}
+                              title="Remove user from this company"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ))
                   ) : (

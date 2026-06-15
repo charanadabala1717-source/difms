@@ -9,6 +9,21 @@ const allowedInviteRoles = ["admin", "staff", "viewer"];
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const canManageTeam = (membership) => ["owner", "admin"].includes(membership?.role);
+const canRemoveTeamMember = ({ currentMembership, targetMember, currentUserId }) => {
+  if (!currentMembership || !targetMember) return false;
+  if (targetMember.role === "owner") return false;
+  if (String(targetMember.user?._id || targetMember.user) === String(currentUserId)) return false;
+
+  if (["owner", "admin"].includes(currentMembership.role)) {
+    return true;
+  }
+
+  return (
+    currentMembership.role === "staff" &&
+    targetMember.invitedBy &&
+    String(targetMember.invitedBy) === String(currentUserId)
+  );
+};
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -272,8 +287,44 @@ const inviteUser = async (req, res) => {
   }
 };
 
+const removeMember = async (req, res) => {
+  try {
+    const member = await OrganizationMember.findOne({
+      _id: req.params.memberId,
+      organization: req.organization._id,
+      status: "active",
+    }).populate("user", "name email");
+
+    if (!member) {
+      return res.status(404).json({ message: "Member not found in this company" });
+    }
+
+    if (
+      !canRemoveTeamMember({
+        currentMembership: req.membership,
+        targetMember: member,
+        currentUserId: req.user._id,
+      })
+    ) {
+      return res.status(403).json({
+        message: "You do not have permission to remove this member",
+      });
+    }
+
+    member.status = "disabled";
+    await member.save();
+
+    res.json({
+      message: `${member.user?.email || "User"} was removed from this company`,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   getMembersAndInvitations,
   inviteUser,
+  removeMember,
   searchUsers,
 };
