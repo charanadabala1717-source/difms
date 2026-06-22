@@ -57,6 +57,12 @@ type QuoteResponse = {
   status: "draft" | "sent" | "accepted" | "rejected" | "expired" | "converted";
 };
 
+type CurrentUserResponse = {
+  activeOrganization?: {
+    currency?: string;
+  };
+};
+
 const formatCurrency = (value: number, currency = "GBP") =>
   formatMoney(value, normalizeCurrency(currency));
 
@@ -134,13 +140,16 @@ export default function OverviewPage() {
         setIsLoading(true);
         setError("");
 
-        const [customerData, invoiceData, paymentData, quoteData] = await Promise.all([
+        const [currentUser, customerData, invoiceData, paymentData, quoteData] = await Promise.all([
+          apiRequest<CurrentUserResponse>("/auth/me"),
           apiRequest<CustomerResponse[]>("/customers"),
           apiRequest<InvoiceResponse[]>("/invoices"),
           apiRequest<PaymentResponse[]>("/payments"),
           apiRequest<QuoteResponse[]>("/quotes"),
         ]);
 
+        localStorage.setItem("user", JSON.stringify(currentUser));
+        setOrganizationCurrency(normalizeCurrency(currentUser.activeOrganization?.currency));
         setCustomers(customerData);
         setInvoices(invoiceData);
         setPayments(paymentData);
@@ -153,7 +162,6 @@ export default function OverviewPage() {
     };
 
     loadOverview();
-    setOrganizationCurrency(getStoredOrganizationCurrency());
     const frameId = window.requestAnimationFrame(() => setChartsReady(true));
 
     return () => window.cancelAnimationFrame(frameId);
