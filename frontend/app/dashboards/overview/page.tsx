@@ -45,6 +45,9 @@ type PaymentResponse = {
   _id: string;
   amount: number;
   currency?: string;
+  invoice?: {
+    currency?: string;
+  };
   paymentDate?: string;
   createdAt?: string;
 };
@@ -58,6 +61,17 @@ const formatCurrency = (value: number, currency = "GBP") =>
   formatMoney(value, normalizeCurrency(currency));
 
 const monthLabels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"];
+
+const getStoredOrganizationCurrency = () => {
+  if (typeof window === "undefined") return "GBP";
+
+  try {
+    const user = JSON.parse(localStorage.getItem("user") || "null");
+    return normalizeCurrency(user?.activeOrganization?.currency);
+  } catch {
+    return "GBP";
+  }
+};
 
 const toUiStatus = (status: InvoiceStatus) => {
   if (status === "paid") return "Paid";
@@ -109,6 +123,7 @@ export default function OverviewPage() {
   const [invoices, setInvoices] = useState<InvoiceResponse[]>([]);
   const [payments, setPayments] = useState<PaymentResponse[]>([]);
   const [quotes, setQuotes] = useState<QuoteResponse[]>([]);
+  const [organizationCurrency, setOrganizationCurrency] = useState("GBP");
   const [isLoading, setIsLoading] = useState(true);
   const [chartsReady, setChartsReady] = useState(false);
   const [error, setError] = useState("");
@@ -138,6 +153,7 @@ export default function OverviewPage() {
     };
 
     loadOverview();
+    setOrganizationCurrency(getStoredOrganizationCurrency());
     const frameId = window.requestAnimationFrame(() => setChartsReady(true));
 
     return () => window.cancelAnimationFrame(frameId);
@@ -149,7 +165,7 @@ export default function OverviewPage() {
       payments.length > 0
         ? payments.map((payment) => ({
               amount: Number(payment.amount) || 0,
-              currency: normalizeCurrency(payment.currency),
+              currency: normalizeCurrency(payment.currency || payment.invoice?.currency || organizationCurrency),
               date: new Date(payment.paymentDate || payment.createdAt || Date.now()),
             }))
         : invoices
@@ -160,15 +176,19 @@ export default function OverviewPage() {
               date: new Date(invoice.createdAt || Date.now()),
             }));
 
-    const totalRevenue = revenueItems.reduce((sum, item) => sum + item.amount, 0);
-    const displayCurrency = revenueItems[0]?.currency || invoices[0]?.currency || "GBP";
-    const weeklyRevenue = revenueItems
+    const displayCurrency = normalizeCurrency(
+      organizationCurrency || revenueItems[0]?.currency || invoices[0]?.currency
+    );
+    const revenueItemsForDisplay = revenueItems.filter((item) => item.currency === displayCurrency);
+    const hasMixedCurrencies = revenueItems.some((item) => item.currency !== displayCurrency);
+    const totalRevenue = revenueItemsForDisplay.reduce((sum, item) => sum + item.amount, 0);
+    const weeklyRevenue = revenueItemsForDisplay
       .filter((item) => isSameWeek(item.date, now))
       .reduce((sum, item) => sum + item.amount, 0);
-    const monthlyRevenue = revenueItems
+    const monthlyRevenue = revenueItemsForDisplay
       .filter((item) => isSameMonth(item.date, now))
       .reduce((sum, item) => sum + item.amount, 0);
-    const annualRevenue = revenueItems
+    const annualRevenue = revenueItemsForDisplay
       .filter((item) => isSameYear(item.date, now))
       .reduce((sum, item) => sum + item.amount, 0);
 
@@ -190,7 +210,7 @@ export default function OverviewPage() {
     ];
 
     const revenueGrowthData = monthLabels.map((month, index) => {
-      const monthRevenue = revenueItems
+      const monthRevenue = revenueItemsForDisplay
         .filter(
           (item) =>
             item.date.getMonth() === index && item.date.getFullYear() === now.getFullYear()
@@ -223,6 +243,7 @@ export default function OverviewPage() {
       weeklyRevenue,
       monthlyRevenue,
       annualRevenue,
+      hasMixedCurrencies,
       paidInvoices,
       pendingInvoices,
       overdueInvoices,
@@ -231,7 +252,7 @@ export default function OverviewPage() {
       revenueGrowthData,
       recentTransactions,
     };
-  }, [customers.length, invoices, payments, quotes]);
+  }, [customers.length, invoices, organizationCurrency, payments, quotes]);
 
   return (
     <div className="min-h-screen">
@@ -245,6 +266,12 @@ export default function OverviewPage() {
       {error && (
         <div className="mb-4 rounded-xl border border-red-400/40 bg-red-500/20 px-4 py-3 text-sm text-white">
           {error}
+        </div>
+      )}
+
+      {overview.hasMixedCurrencies && (
+        <div className="mb-4 rounded-xl border border-amber-300/40 bg-amber-500/20 px-4 py-3 text-sm text-white">
+          Revenue totals are shown in {overview.displayCurrency}. Invoices in other currencies are shown in recent transactions but excluded from revenue totals.
         </div>
       )}
 
