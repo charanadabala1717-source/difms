@@ -50,7 +50,6 @@ Each business works inside its own organization.
 - Admin: can manage users, company settings, customers, quotes, invoices, and payments inside their organization.
 - Staff: can work with operational records; backend supports removing members they invited.
 - Viewer: read-only access. Viewers cannot create, edit, delete, send quotes, convert quotes, send invoice emails, or record payments.
-- Super Admin: platform-level access for managing companies and selected platform operations.
 
 ## User Invitation Flow
 
@@ -69,7 +68,7 @@ Company settings control:
 - Company email
 - Phone and address
 - Logo upload
-- Currency: GBP or ZMW
+- Currency: worldwide ISO currency selection
 - Default tax percentage
 - Default discount percentage
 - Team users and roles
@@ -105,7 +104,6 @@ Tax is automatically applied to quotes and invoices. Discount is applied to quot
 - Quotes: `frontend/app/dashboards/quotes/page.tsx`
 - Invoices: `frontend/app/dashboards/invoices/page.tsx`
 - Settings: `frontend/app/dashboards/settings/page.tsx`
-- Super Admin Companies: `frontend/app/dashboards/super-admin/companies/page.tsx`
 
 ## Backend Setup
 
@@ -123,7 +121,6 @@ MONGO_URI=your_mongodb_connection_string
 JWT_SECRET=your_long_secret
 CLIENT_URL=http://localhost:3000
 API_URL=http://localhost:5000
-SUPER_ADMIN_CREATOR_EMAIL=owner@example.com
 ```
 
 Optional email variables:
@@ -141,6 +138,8 @@ Optional Stripe variable:
 
 ```env
 STRIPE_SECRET_KEY=sk_test_or_live_key
+STRIPE_FALLBACK_CURRENCY=GBP
+EXCHANGE_RATE_API_KEY=optional_exchange_rate_api_key
 ```
 
 ## Frontend Setup
@@ -155,7 +154,6 @@ Required frontend environment variable:
 
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:5000/api
-NEXT_PUBLIC_SUPER_ADMIN_CREATOR_EMAIL=owner@example.com
 ```
 
 ## Local URLs
@@ -186,6 +184,7 @@ The system is production-deployed with:
 - Quote accept/reject flow
 - Invoice conversion
 - Stripe payment flow
+- Stripe currency conversion when needed
 - Invoice and receipt PDFs
 - SMTP emails with PDF attachments
 - Company branding in emails and PDFs

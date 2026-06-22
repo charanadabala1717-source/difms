@@ -14,6 +14,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import { apiRequest } from "../../difm/lib/api";
+import { formatCurrency as formatMoney, normalizeCurrency } from "../../difm/lib/currencies";
 
 type CustomerResponse = {
   _id: string;
@@ -34,6 +35,7 @@ type InvoiceResponse = {
     name?: string;
   };
   total: number;
+  currency?: string;
   amountPaid?: number;
   status: InvoiceStatus;
   createdAt?: string;
@@ -42,6 +44,7 @@ type InvoiceResponse = {
 type PaymentResponse = {
   _id: string;
   amount: number;
+  currency?: string;
   paymentDate?: string;
   createdAt?: string;
 };
@@ -51,13 +54,8 @@ type QuoteResponse = {
   status: "draft" | "sent" | "accepted" | "rejected" | "expired" | "converted";
 };
 
-const currencyFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "GBP",
-  maximumFractionDigits: 0,
-});
-
-const formatCurrency = (value: number) => currencyFormatter.format(value || 0);
+const formatCurrency = (value: number, currency = "GBP") =>
+  formatMoney(value, normalizeCurrency(currency));
 
 const monthLabels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"];
 
@@ -150,17 +148,20 @@ export default function OverviewPage() {
     const revenueItems =
       payments.length > 0
         ? payments.map((payment) => ({
-            amount: Number(payment.amount) || 0,
-            date: new Date(payment.paymentDate || payment.createdAt || Date.now()),
-          }))
+              amount: Number(payment.amount) || 0,
+              currency: normalizeCurrency(payment.currency),
+              date: new Date(payment.paymentDate || payment.createdAt || Date.now()),
+            }))
         : invoices
             .filter((invoice) => invoice.status === "paid")
             .map((invoice) => ({
               amount: Number(invoice.amountPaid || invoice.total) || 0,
+              currency: normalizeCurrency(invoice.currency),
               date: new Date(invoice.createdAt || Date.now()),
             }));
 
     const totalRevenue = revenueItems.reduce((sum, item) => sum + item.amount, 0);
+    const displayCurrency = revenueItems[0]?.currency || invoices[0]?.currency || "GBP";
     const weeklyRevenue = revenueItems
       .filter((item) => isSameWeek(item.date, now))
       .reduce((sum, item) => sum + item.amount, 0);
@@ -209,7 +210,7 @@ export default function OverviewPage() {
       .map((invoice) => ({
         id: invoice.invoiceNumber,
         customer: invoice.customer?.name || "Unknown Customer",
-        amount: formatCurrency(invoice.total),
+        amount: formatCurrency(invoice.total, invoice.currency),
         status: toUiStatus(invoice.status),
       }));
 
@@ -218,6 +219,7 @@ export default function OverviewPage() {
       totalInvoices: invoices.length,
       openQuotes: quotes.filter((quote) => quote.status !== "converted").length,
       totalRevenue,
+      displayCurrency,
       weeklyRevenue,
       monthlyRevenue,
       annualRevenue,
@@ -268,25 +270,25 @@ export default function OverviewPage() {
       <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           title="Total Revenue"
-          value={formatCurrency(overview.totalRevenue)}
+          value={formatCurrency(overview.totalRevenue, overview.displayCurrency)}
           trend="From payments/paid invoices"
           trendColor="text-green-400"
         />
         <StatCard
           title="Weekly Revenue"
-          value={formatCurrency(overview.weeklyRevenue)}
+          value={formatCurrency(overview.weeklyRevenue, overview.displayCurrency)}
           trend="Current week"
           trendColor="text-green-400"
         />
         <StatCard
           title="Monthly Revenue"
-          value={formatCurrency(overview.monthlyRevenue)}
+          value={formatCurrency(overview.monthlyRevenue, overview.displayCurrency)}
           trend="Current month"
           trendColor="text-green-400"
         />
         <StatCard
           title="Annual Revenue"
-          value={formatCurrency(overview.annualRevenue)}
+          value={formatCurrency(overview.annualRevenue, overview.displayCurrency)}
           trend="Current year"
           trendColor="text-green-400"
         />

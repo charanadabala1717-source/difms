@@ -41,6 +41,36 @@ const paymentSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    processorCurrency: {
+      type: String,
+      uppercase: true,
+      trim: true,
+    },
+    processorAmount: {
+      type: Number,
+      min: 0,
+    },
+    exchangeRate: {
+      type: Number,
+      min: 0,
+    },
+    exchangeRateProvider: {
+      type: String,
+      trim: true,
+    },
+    exchangeRateFrom: {
+      type: String,
+      uppercase: true,
+      trim: true,
+    },
+    exchangeRateTo: {
+      type: String,
+      uppercase: true,
+      trim: true,
+    },
+    exchangeRateDate: {
+      type: Date,
+    },
     notes: {
       type: String,
     },

@@ -5,7 +5,9 @@ const {
   formatCurrency,
   getClientBaseUrl,
 } = require("../utils/flowHelpers");
+const { convertAmount, DEFAULT_STRIPE_FALLBACK_CURRENCY } = require("../utils/exchangeRates");
 const { recordInvoicePayment } = require("../utils/paymentHelpers");
+const { isStripeCurrencyError, toStripeAmount } = require("../utils/stripeCurrency");
 
 const renderMessage = (title, message) => {
   return `
@@ -129,17 +131,26 @@ const openPayment = async (req, res) => {
     if (process.env.STRIPE_SECRET_KEY) {
       const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
       const apiUrl = process.env.API_URL || `http://localhost:${process.env.PORT || 5000}`;
-      const session = await stripe.checkout.sessions.create({
+
+      const createCheckoutSession = (checkoutCurrency, checkoutAmount, conversion = null) => {
+        const originalCurrency = String(invoice.currency || "GBP").toUpperCase();
+        const chargedCurrency = String(checkoutCurrency || originalCurrency).toUpperCase();
+        const convertedMessage = conversion
+          ? ` Payment will be processed as ${formatCurrency(conversion.convertedAmount, chargedCurrency)} using exchange rate 1 ${conversion.from} = ${conversion.rate} ${conversion.to}.`
+          : "";
+
+        return stripe.checkout.sessions.create({
         mode: "payment",
         payment_method_types: ["card"],
         line_items: [
           {
             quantity: 1,
             price_data: {
-              currency: String(invoice.currency || "GBP").toLowerCase(),
-              unit_amount: Math.round(invoice.balanceDue * 100),
+                currency: chargedCurrency.toLowerCase(),
+                unit_amount: toStripeAmount(checkoutAmount, chargedCurrency),
               product_data: {
                 name: `Invoice ${invoice.invoiceNumber}`,
+                  description: `Invoice amount: ${formatCurrency(invoice.balanceDue, originalCurrency)}.${convertedMessage}`,
               },
             },
           },
@@ -147,12 +158,43 @@ const openPayment = async (req, res) => {
         metadata: {
           invoiceId: String(invoice._id),
           paymentToken: invoice.paymentToken,
+            invoiceCurrency: originalCurrency,
+            invoiceAmount: String(invoice.balanceDue),
+            processorCurrency: chargedCurrency,
+            processorAmount: String(checkoutAmount),
+            exchangeRate: conversion ? String(conversion.rate) : "",
+            exchangeRateProvider: conversion?.provider || "",
+            exchangeRateFrom: conversion?.from || "",
+            exchangeRateTo: conversion?.to || "",
+            exchangeRateDate: conversion?.convertedAt ? conversion.convertedAt.toISOString() : "",
         },
         success_url: `${apiUrl}/api/public/invoices/${invoice.paymentToken}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${apiUrl}/api/public/invoices/${invoice.paymentToken}/pay`,
       });
+      };
 
-      return res.redirect(303, session.url);
+      try {
+        const session = await createCheckoutSession(invoice.currency || "GBP", invoice.balanceDue);
+        return res.redirect(303, session.url);
+      } catch (error) {
+        if (!isStripeCurrencyError(error)) {
+          throw error;
+        }
+
+        const conversion = await convertAmount(
+          invoice.balanceDue,
+          invoice.currency,
+          process.env.STRIPE_FALLBACK_CURRENCY || DEFAULT_STRIPE_FALLBACK_CURRENCY
+        );
+
+        const session = await createCheckoutSession(
+          conversion.to,
+          conversion.convertedAmount,
+          conversion
+        );
+
+        return res.redirect(303, session.url);
+      }
     }
 
     return res.send(`
@@ -238,12 +280,28 @@ const stripePaymentSuccess = async (req, res) => {
     }
 
     if (invoice.balanceDue > 0) {
+      const exchangeRate = Number(session.metadata?.exchangeRate) || undefined;
+      const processorAmount = Number(session.metadata?.processorAmount) || undefined;
+      const processorCurrency = session.metadata?.processorCurrency || session.currency;
+      const conversionNote = exchangeRate
+        ? `Stripe Checkout payment. Invoice ${formatCurrency(invoice.balanceDue, invoice.currency)} was processed as ${formatCurrency(processorAmount, processorCurrency)}.`
+        : "Stripe Checkout payment";
+
       await recordInvoicePayment({
         invoice,
         amount: invoice.balanceDue,
         method: "card",
         referenceNumber: session.payment_intent,
-        notes: "Stripe Checkout payment",
+        processorCurrency,
+        processorAmount,
+        exchangeRate,
+        exchangeRateProvider: session.metadata?.exchangeRateProvider,
+        exchangeRateFrom: session.metadata?.exchangeRateFrom,
+        exchangeRateTo: session.metadata?.exchangeRateTo,
+        exchangeRateDate: session.metadata?.exchangeRateDate
+          ? new Date(session.metadata.exchangeRateDate)
+          : undefined,
+        notes: conversionNote,
       });
     }
 

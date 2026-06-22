@@ -18,6 +18,13 @@ const recordInvoicePayment = async ({
   amount,
   method = "card",
   referenceNumber,
+  processorCurrency,
+  processorAmount,
+  exchangeRate,
+  exchangeRateProvider,
+  exchangeRateFrom,
+  exchangeRateTo,
+  exchangeRateDate,
   notes,
 }) => {
   const paymentAmount = Number(amount);
@@ -39,6 +46,13 @@ const recordInvoicePayment = async ({
     paymentDate: Date.now(),
     method,
     referenceNumber,
+    processorCurrency,
+    processorAmount,
+    exchangeRate,
+    exchangeRateProvider,
+    exchangeRateFrom,
+    exchangeRateTo,
+    exchangeRateDate,
     notes,
   });
 

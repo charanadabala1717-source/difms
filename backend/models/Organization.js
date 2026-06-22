@@ -32,8 +32,9 @@ const organizationSchema = new mongoose.Schema(
     },
     currency: {
       type: String,
-      enum: ["GBP", "ZMW"],
       default: "GBP",
+      uppercase: true,
+      trim: true,
     },
     taxPercentage: {
       type: Number,

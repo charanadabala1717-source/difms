@@ -20,7 +20,6 @@ The backend handles:
 - Payment and receipt records
 - PDF generation
 - SMTP email sending
-- Super admin company management
 
 ## Tech Stack
 
@@ -87,7 +86,6 @@ MONGO_URI=your_mongodb_connection_string
 JWT_SECRET=your_long_jwt_secret
 CLIENT_URL=http://localhost:3000
 API_URL=http://localhost:5000
-SUPER_ADMIN_CREATOR_EMAIL=owner@example.com
 ```
 
 Email settings:
@@ -105,6 +103,8 @@ Stripe:
 
 ```env
 STRIPE_SECRET_KEY=sk_test_or_live_key
+STRIPE_FALLBACK_CURRENCY=GBP
+EXCHANGE_RATE_API_KEY=optional_exchange_rate_api_key
 ```
 
 Optional:
@@ -214,7 +214,6 @@ Users only access records within their organization.
 - Owner/Admin: full company management.
 - Staff: operational access.
 - Viewer: read-only. Backend blocks write APIs.
-- Super Admin: platform-level access.
 
 Temporary password users are blocked from all protected APIs except:
 
@@ -226,6 +225,14 @@ until they change their password.
 ## Email and PDF Behavior
 
 Emails are sent using SMTP through Nodemailer.
+
+Stripe currency conversion:
+
+- Stripe first tries the invoice currency.
+- If Stripe rejects that currency, the backend converts the balance to `STRIPE_FALLBACK_CURRENCY`.
+- `STRIPE_FALLBACK_CURRENCY` defaults to `GBP`.
+- `EXCHANGE_RATE_API_KEY` can be used with exchangerate-api.com.
+- Without `EXCHANGE_RATE_API_KEY`, the backend uses the public `open.er-api.com` endpoint.
 
 Supported emails:
 
@@ -250,7 +257,6 @@ MONGO_URI=production_mongodb_uri
 JWT_SECRET=production_secret
 CLIENT_URL=https://your-frontend-domain
 API_URL=https://your-backend-domain
-SUPER_ADMIN_CREATOR_EMAIL=owner@example.com
 SMTP_HOST=...
 SMTP_PORT=...
 SMTP_USER=...

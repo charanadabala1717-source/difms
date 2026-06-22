@@ -12,9 +12,9 @@ import {
   X,
 } from "lucide-react";
 import { apiRequest } from "../../../difm/lib/api";
+import { CurrencyCode, currencyOptions, normalizeCurrency } from "../../../difm/lib/currencies";
 
 type OrganizationStatus = "active" | "inactive" | "suspended";
-type Currency = "GBP" | "ZMW";
 
 type OrganizationRow = {
   _id: string;
@@ -24,7 +24,7 @@ type OrganizationRow = {
   phone?: string;
   address?: string;
   logoUrl?: string;
-  currency: Currency;
+  currency: CurrencyCode;
   status: OrganizationStatus;
   createdAt?: string;
   owner?: {
@@ -50,12 +50,11 @@ type CompanyForm = {
   phone: string;
   address: string;
   logoUrl: string;
-  currency: Currency;
+  currency: CurrencyCode;
   status: OrganizationStatus;
 };
 
 const organizationStatuses: OrganizationStatus[] = ["active", "inactive", "suspended"];
-const currencies: Currency[] = ["GBP", "ZMW"];
 
 const emptyCompanyForm: CompanyForm = {
   name: "",
@@ -187,7 +186,7 @@ export default function SuperAdminCompaniesPage() {
       phone: organization.phone || "",
       address: organization.address || "",
       logoUrl: organization.logoUrl || "",
-      currency: organization.currency,
+      currency: normalizeCurrency(organization.currency),
       status: organization.status,
     });
     setCompanyFormVisible(true);
@@ -466,13 +465,13 @@ export default function SuperAdminCompaniesPage() {
               <select
                 value={companyForm.currency}
                 onChange={(event) =>
-                  handleCompanyFormChange("currency", event.target.value as Currency)
+                  handleCompanyFormChange("currency", event.target.value)
                 }
                 className="min-h-12 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 text-white outline-none transition focus:border-blue-400"
               >
-                {currencies.map((currency) => (
-                  <option key={currency} value={currency}>
-                    {currency}
+                {currencyOptions.map((currency) => (
+                  <option key={currency.value} value={currency.value}>
+                    {currency.label}
                   </option>
                 ))}
               </select>

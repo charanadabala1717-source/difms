@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Mail, Pencil, Trash2, Search, X, FileDown } from "lucide-react";
 import { apiBlobRequest, apiRequest } from "../../difm/lib/api";
+import { CurrencyCode, currencyOptions, formatCurrency, normalizeCurrency } from "../../difm/lib/currencies";
 
 type InvoiceStatus = "Paid" | "Pending" | "Overdue";
 
@@ -11,7 +12,7 @@ type InvoiceRow = {
   invoiceId: string;
   customerName: string;
   amount: string;
-  currency: "GBP" | "ZMW";
+  currency: CurrencyCode;
   status: InvoiceStatus;
 };
 
@@ -22,7 +23,7 @@ type InvoiceResponse = {
     name?: string;
   };
   total: number;
-  currency?: "GBP" | "ZMW";
+  currency?: CurrencyCode;
   amountPaid?: number;
   balanceDue?: number;
   status: "draft" | "sent" | "partially_paid" | "paid" | "overdue" | "cancelled";
@@ -37,17 +38,8 @@ type UserResponse = {
 const emptyForm = {
   customerName: "",
   amount: "",
-  currency: "GBP" as "GBP" | "ZMW",
+  currency: "GBP" as CurrencyCode,
   status: "Pending" as InvoiceStatus,
-};
-
-const formatCurrency = (amount: string | number, currency: "GBP" | "ZMW" = "GBP") => {
-  if (currency === "ZMW") return `K${Number(amount || 0).toFixed(2)}`;
-
-  return new Intl.NumberFormat("en-GB", {
-    style: "currency",
-    currency: "GBP",
-  }).format(Number(amount) || 0);
 };
 
 const mapStatus = (invoice: InvoiceResponse): InvoiceStatus => {
@@ -68,7 +60,7 @@ const mapInvoice = (invoice: InvoiceResponse): InvoiceRow => ({
   invoiceId: invoice.invoiceNumber,
   customerName: invoice.customer?.name || "Unknown Customer",
   amount: String(invoice.total || 0),
-  currency: invoice.currency || "GBP",
+  currency: normalizeCurrency(invoice.currency),
   status: mapStatus(invoice),
 });
 
@@ -487,8 +479,11 @@ export default function InvoicesPage() {
                     onChange={handleChange}
                     className="cursor-pointer rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-sm text-white outline-none transition focus:border-blue-500"
                   >
-                    <option value="GBP">GBP (£)</option>
-                    <option value="ZMW">ZMW (K)</option>
+                    {currencyOptions.map((currency) => (
+                      <option key={currency.value} value={currency.value}>
+                        {currency.label}
+                      </option>
+                    ))}
                   </select>
                   <input
                     type="text"

@@ -15,7 +15,6 @@ The frontend provides the browser UI for:
 - Invoices
 - Company settings
 - Users and roles
-- Super admin company management
 
 The app connects to the Express backend through REST API calls from `app/difm/lib/api.ts`.
 
@@ -47,7 +46,6 @@ frontend/
       quotes/page.tsx                Quote creation and management
       invoices/page.tsx              Invoice list and PDF actions
       settings/page.tsx              Company settings, users, roles
-      super-admin/                   Platform admin pages
   public/
     images/
 ```
@@ -58,14 +56,12 @@ Create `frontend/.env.local`.
 
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:5000/api
-NEXT_PUBLIC_SUPER_ADMIN_CREATOR_EMAIL=owner@example.com
 ```
 
 For production:
 
 ```env
 NEXT_PUBLIC_API_URL=https://your-backend-domain/api
-NEXT_PUBLIC_SUPER_ADMIN_CREATOR_EMAIL=owner@example.com
 ```
 
 ## Setup
@@ -105,7 +101,6 @@ npm run lint     # Run ESLint
 - Owner/Admin: can access settings and manage users.
 - Staff: can work with operational modules.
 - Viewer: read-only UI. Write actions are hidden.
-- Platform owner email can access super admin actions when configured.
 
 ## Main Pages
 
@@ -118,8 +113,6 @@ npm run lint     # Run ESLint
 - `/dashboards/quotes`
 - `/dashboards/invoices`
 - `/dashboards/settings`
-- `/dashboards/super-admin/companies`
-- `/dashboards/super-admin/make-super-admin`
 
 ## Deployment
 
@@ -129,7 +122,6 @@ Set these Vercel environment variables:
 
 ```env
 NEXT_PUBLIC_API_URL=https://your-backend-domain/api
-NEXT_PUBLIC_SUPER_ADMIN_CREATOR_EMAIL=owner@example.com
 ```
 
 After deployment, make sure the backend `CLIENT_URL` points to the frontend production URL.

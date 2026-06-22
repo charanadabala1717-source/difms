@@ -25,8 +25,9 @@ const userSchema = new mongoose.Schema(
     },
     currency: {
       type: String,
-      enum: ["GBP", "ZMW"],
       default: "GBP",
+      uppercase: true,
+      trim: true,
     },
     mustChangePassword: {
       type: Boolean,

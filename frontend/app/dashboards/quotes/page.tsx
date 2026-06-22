@@ -11,8 +11,7 @@ import {
   X,
 } from "lucide-react";
 import { apiRequest } from "../../difm/lib/api";
-
-type CurrencyCode = "GBP" | "ZMW";
+import { CurrencyCode, formatCurrency, normalizeCurrency } from "../../difm/lib/currencies";
 type QuoteStatus = "draft" | "sent" | "accepted" | "rejected" | "expired" | "converted";
 
 type CustomerResponse = {
@@ -66,15 +65,6 @@ const emptyForm = {
   items: [{ name: "", quantity: "1", price: "" }] as QuoteItem[],
 };
 
-const formatCurrency = (amount: number, currency: CurrencyCode = "GBP") => {
-  if (currency === "ZMW") return `K${Number(amount || 0).toFixed(2)}`;
-
-  return new Intl.NumberFormat("en-GB", {
-    style: "currency",
-    currency: "GBP",
-  }).format(Number(amount) || 0);
-};
-
 const toUiStatus = (status: QuoteStatus) => {
   if (status === "draft" || status === "sent") return "Pending";
   if (status === "accepted") return "Accepted";
@@ -112,7 +102,7 @@ export default function QuotesPage() {
       ]);
       setQuotes(quoteData);
       setCustomers(customerData);
-      setDefaultCurrency(userData.activeOrganization?.currency || userData.currency || "GBP");
+      setDefaultCurrency(normalizeCurrency(userData.activeOrganization?.currency || userData.currency));
       setTaxPercentage(Number(userData.activeOrganization?.taxPercentage) || 0);
       setDiscountPercentage(Number(userData.activeOrganization?.discountPercentage) || 0);
       setCanEditWorkspace(userData.activeOrganization?.role !== "viewer");
@@ -176,7 +166,7 @@ export default function QuotesPage() {
     setEditingQuoteId(quote._id);
     setFormData({
       customer: quote.customer?._id || "",
-      currency: quote.currency || defaultCurrency,
+      currency: normalizeCurrency(quote.currency || defaultCurrency),
       discountEnabled: Boolean(quote.discountEnabled || Number(quote.discount) > 0),
       items:
         quote.items.length > 0

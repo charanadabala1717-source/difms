@@ -4,8 +4,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Building2, ChevronDown, ImagePlus, Mail, Search, Trash2, UserCog, Users, X } from "lucide-react";
 import { apiRequest } from "../../difm/lib/api";
-
-type CurrencyCode = "GBP" | "ZMW";
+import { CurrencyCode, currencyOptions, normalizeCurrency } from "../../difm/lib/currencies";
 
 type OrganizationResponse = {
   _id: string;
@@ -81,11 +80,6 @@ const emptyCompanySettings: CompanySettingsForm = {
   taxPercentage: "0",
   discountPercentage: "0",
 };
-
-const currencies: Array<{ value: CurrencyCode; label: string }> = [
-  { value: "GBP", label: "GBP" },
-  { value: "ZMW", label: "ZMW (K)" },
-];
 
 const teamRoles: Array<{ value: TeamRole; label: string; description: string }> = [
   {
@@ -205,7 +199,7 @@ export default function SettingsPage() {
           phoneNumber: phoneParts.phoneNumber,
           address: company?.address || "",
           logoUrl: company?.logoUrl || "",
-          currency: company?.currency || "GBP",
+          currency: normalizeCurrency(company?.currency),
           taxPercentage: String(company?.taxPercentage ?? 0),
           discountPercentage: String(company?.discountPercentage ?? 0),
         });
@@ -626,7 +620,7 @@ export default function SettingsPage() {
                   disabled={!canEditCompany}
                   className="min-h-12 w-full cursor-pointer rounded-xl border border-slate-700 bg-slate-900 px-4 text-white outline-none transition focus:border-blue-500 disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  {currencies.map((currency) => (
+                  {currencyOptions.map((currency) => (
                     <option key={currency.value} value={currency.value}>
                       {currency.label}
                     </option>
